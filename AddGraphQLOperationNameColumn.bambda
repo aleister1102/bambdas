@@ -1,0 +1,18 @@
+id: fb85ee0d-1924-4825-983f-cbaf1b019c4e
+name: AddGraphQLOperationNameColumn
+function: CUSTOM_COLUMN
+location: PROXY_HTTP_HISTORY
+source: |+
+  /**
+  * Add GraphQL operation name column.
+  *
+  * @author PortSwigger
+  **/
+  String requestBody = requestResponse.request().bodyToString();
+  
+  if (!utilities.jsonUtils().isValidJson(requestBody)) {
+  	return "";
+  }
+  
+  return utilities.jsonUtils().readString(requestBody, "operationName");
+  

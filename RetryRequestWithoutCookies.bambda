@@ -1,0 +1,13 @@
+id: b4735d89-5562-410e-9c8c-7d131d25fdbe
+name: RetryRequestWithoutCookies
+function: CUSTOM_ACTION
+location: REPEATER
+source: |+
+  /**
+  * Retry request without cookies.
+  *
+  * @author PortSwigger
+  **/
+  var req = requestResponse.request();
+  logging().logToOutput(api().http().sendRequest(req.withRemovedHeader("Authorization").withRemovedHeader("Cookie")).response().statusCode());
+  

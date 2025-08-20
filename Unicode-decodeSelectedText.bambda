@@ -1,0 +1,14 @@
+id: 6cb44a25-e237-4bd5-ae6a-9e414dba626f
+name: Unicode-decodeSelectedText
+function: CUSTOM_ACTION
+location: REPEATER
+source: |+
+  /**
+  * Unicode-decode selected text.
+  *
+  * @author PortSwigger
+  **/
+  Pattern pattern = Pattern.compile("\\\\u([0-9a-fA-F]{4})");
+  String selectedResponseText = selection.responseSelection().contents().toString();
+  logging().logToOutput(pattern.matcher(selectedResponseText).replaceAll(match -> String.valueOf((char) Integer.parseInt(match.group(1), 16))));
+  

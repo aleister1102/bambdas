@@ -1,0 +1,74 @@
+id: 28096ab5-87f3-407e-9d10-b49f17bc7d02
+name: GraphQL
+function: CUSTOM_COLUMN
+location: PROXY_HTTP_HISTORY
+source: |+
+  /*
+   * Bambda for Burp Suite to identify GraphQL requests and extract the
+   * operation name and variables.
+   *
+   * How it works:
+   * 1. Gets the HttpRequest object from the implicit requestResponse object.
+   * 2. Checks if the request has a body.
+   * 3. Uses regular expressions to find and extract the "operationName" and "variables".
+   * 4. If a GraphQL request is identified (by operationName or keywords), it constructs
+   * a detailed note including the operation name and any non-empty variables.
+   * 5. Sets the note and highlight color on the requestResponse object.
+   * 6. Returns true if a GraphQL request is identified, otherwise false.
+   */
+  
+  // Get the request part from the request/response pair.
+  var request = requestResponse.request();
+  
+  // Check if the request has a body.
+  if (request.body().length() > 0) {
+      String body = request.bodyToString();
+  
+      // Regex for operationName
+      java.util.regex.Pattern opNamePattern = java.util.regex.Pattern.compile("\"operationName\"\\s*:\\s*\"([^\"]+)\"");
+      java.util.regex.Matcher opNameMatcher = opNamePattern.matcher(body);
+  
+      // Regex for variables. This captures the JSON object associated with the "variables" key.
+      java.util.regex.Pattern varsPattern = java.util.regex.Pattern.compile("\"variables\"\\s*:\\s*(\\{.*?\\})");
+      java.util.regex.Matcher varsMatcher = varsPattern.matcher(body);
+  
+      String operationName = null;
+      if (opNameMatcher.find()) {
+          operationName = opNameMatcher.group(1);
+      }
+  
+      String variables = null;
+      if (varsMatcher.find()) {
+          String capturedVars = varsMatcher.group(1);
+          // Check if the variables object is not empty (i.e., not just "{}")
+          if (capturedVars.length() > 2) {
+              variables = capturedVars;
+          }
+      }
+      
+      // Determine if it's a GraphQL request
+      boolean isGraphQL = operationName != null || body.contains("\"query\"") || body.contains("\"mutation\"");
+  
+      if (isGraphQL) {
+          StringBuilder notes = new StringBuilder("GraphQL: ");
+  
+          if (operationName != null) {
+              notes.append(operationName);
+          } else {
+              notes.append("Anonymous Query");
+          }
+  
+          if (variables != null) {
+              notes.append(" | Vars: ").append(variables);
+          }
+          
+          // Set the notes and highlight color via the annotations() object.
+          requestResponse.annotations().setNotes(notes.toString());
+          // requestResponse.annotations().setHighlightColor(burp.api.montoya.ui.HighlightColor.ORANGE);
+          
+          return true;
+      }
+  }
+  
+  // If the request doesn't look like a GraphQL query, return false.
+  return false;
