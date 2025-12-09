@@ -1,0 +1,199 @@
+id: f3c8d2a1-7e4b-4f9c-b8d6-2a1e3f5c7d9b
+name: Add Quote to JSON String Fields
+function: CUSTOM_ACTION
+location: REPEATER
+source: |+
+  /**
+   * Iterates through URL-encoded JSON in query parameters and adds a single quote
+   * to each string field one at a time, sending a request for each modification.
+   * 
+   * Useful for SQL injection testing on JSON-based APIs.
+   *
+   * @author quan.m.le
+   **/
+  
+  import java.net.URLDecoder;
+  import java.net.URLEncoder;
+  import java.nio.charset.StandardCharsets;
+  import java.util.regex.Pattern;
+  import java.util.regex.Matcher;
+  import java.util.ArrayList;
+  import java.util.List;
+  
+  var request = requestResponse.request();
+  var httpVersion = request.httpVersion().equals("HTTP/2") ? HttpMode.HTTP_2 : HttpMode.HTTP_1;
+  
+  // Get the full path with query string
+  String fullPath = request.path();
+  int queryStart = fullPath.indexOf("?");
+  
+  if (queryStart == -1) {
+      logging().logToOutput("No query parameters found");
+      return;
+  }
+  
+  String pathWithoutQuery = fullPath.substring(0, queryStart);
+  String queryString = fullPath.substring(queryStart + 1);
+  
+  // Find URL-encoded JSON in query parameters (looking for 'data=' or any param with JSON)
+  String[] params = queryString.split("&");
+  String targetParamName = null;
+  String encodedJson = null;
+  int targetParamIndex = -1;
+  
+  for (int i = 0; i < params.length; i++) {
+      String param = params[i];
+      int eqIndex = param.indexOf("=");
+      if (eqIndex > 0) {
+          String value = param.substring(eqIndex + 1);
+          // Check if value looks like URL-encoded JSON (starts with %7b which is '{')
+          if (value.startsWith("%7b") || value.startsWith("%7B")) {
+              targetParamName = param.substring(0, eqIndex);
+              encodedJson = value;
+              targetParamIndex = i;
+              break;
+          }
+      }
+  }
+  
+  if (encodedJson == null) {
+      logging().logToOutput("No URL-encoded JSON found in query parameters");
+      return;
+  }
+  
+  // Decode the JSON
+  String decodedJson;
+  try {
+      decodedJson = URLDecoder.decode(encodedJson, StandardCharsets.UTF_8.toString());
+  } catch (Exception e) {
+      logging().logToOutput("Failed to URL decode: " + e.getMessage());
+      return;
+  }
+  
+  logging().logToOutput("Original JSON: " + decodedJson);
+  logging().logToOutput("-------------------------------------------");
+  
+  // Find all string values in JSON using regex
+  // Pattern matches "key":"value" where value is a string
+  Pattern stringPattern = Pattern.compile("\"([^\"]+)\"\\s*:\\s*\"([^\"]*)\"");
+  Matcher matcher = stringPattern.matcher(decodedJson);
+  
+  List<int[]> stringPositions = new ArrayList<>();
+  List<String> fieldNames = new ArrayList<>();
+  
+  while (matcher.find()) {
+      // Store the start and end positions of the value (group 2)
+      int valueStart = matcher.start(2);
+      int valueEnd = matcher.end(2);
+      stringPositions.add(new int[]{valueStart, valueEnd});
+      fieldNames.add(matcher.group(1));
+  }
+  
+  // Also find string values in arrays like ["value1", "value2"]
+  Pattern arrayStringPattern = Pattern.compile("\\[([^\\]]*\"[^\\]]+)\\]");
+  Matcher arrayMatcher = arrayStringPattern.matcher(decodedJson);
+  
+  while (arrayMatcher.find()) {
+      String arrayContent = arrayMatcher.group(1);
+      int arrayStart = arrayMatcher.start(1);
+      
+      // Find each string in the array
+      Pattern innerStringPattern = Pattern.compile("\"([^\"]*)\"");
+      Matcher innerMatcher = innerStringPattern.matcher(arrayContent);
+      
+      while (innerMatcher.find()) {
+          int valueStart = arrayStart + innerMatcher.start(1);
+          int valueEnd = arrayStart + innerMatcher.end(1);
+          // Check if this position is not already tracked (avoid duplicates)
+          boolean isDuplicate = false;
+          for (int[] pos : stringPositions) {
+              if (pos[0] == valueStart) {
+                  isDuplicate = true;
+                  break;
+              }
+          }
+          if (!isDuplicate) {
+              stringPositions.add(new int[]{valueStart, valueEnd});
+              fieldNames.add("array_item");
+          }
+      }
+  }
+  
+  logging().logToOutput("Found " + stringPositions.size() + " string fields to test");
+  logging().logToOutput("-------------------------------------------");
+  
+  int requestCount = 0;
+  
+  // Iterate through each string field and add a quote
+  for (int i = 0; i < stringPositions.size(); i++) {
+      int[] pos = stringPositions.get(i);
+      String fieldName = fieldNames.get(i);
+      
+      // Create modified JSON with quote added to this field
+      StringBuilder modifiedJson = new StringBuilder();
+      modifiedJson.append(decodedJson.substring(0, pos[1]));
+      modifiedJson.append("'"); // Add single quote at end of string value
+      modifiedJson.append(decodedJson.substring(pos[1]));
+      
+      String modifiedJsonStr = modifiedJson.toString();
+      
+      // URL encode the modified JSON
+      String encodedModifiedJson;
+      try {
+          encodedModifiedJson = URLEncoder.encode(modifiedJsonStr, StandardCharsets.UTF_8.toString());
+      } catch (Exception e) {
+          logging().logToOutput("Failed to URL encode: " + e.getMessage());
+          continue;
+      }
+      
+      // Rebuild the query string with modified JSON
+      StringBuilder newQueryString = new StringBuilder();
+      for (int j = 0; j < params.length; j++) {
+          if (j > 0) newQueryString.append("&");
+          if (j == targetParamIndex) {
+              newQueryString.append(targetParamName).append("=").append(encodedModifiedJson);
+          } else {
+              newQueryString.append(params[j]);
+          }
+      }
+      
+      // Create new path with modified query
+      String newPath = pathWithoutQuery + "?" + newQueryString.toString();
+      
+      // Create modified request
+      var modifiedRequest = request.withPath(newPath);
+      
+      // Send the request
+      requestCount++;
+      logging().logToOutput("[" + requestCount + "] Testing field: " + fieldName);
+      logging().logToOutput("    Value with quote added at position " + pos[1]);
+      
+      try {
+          var response = api().http().sendRequest(modifiedRequest, httpVersion);
+          int statusCode = response.response().statusCode();
+          int responseLength = response.response().body().length();
+          
+          logging().logToOutput("    Status: " + statusCode + " | Length: " + responseLength);
+          
+          // If we get an interesting response (error), show it in the response pane
+          if (statusCode >= 400 || statusCode == 200) {
+              // Check for SQL error indicators in response
+              String responseBody = response.response().bodyToString();
+              if (responseBody.contains("SQL") || responseBody.contains("syntax") || 
+                  responseBody.contains("error") || responseBody.contains("exception") ||
+                  responseBody.contains("ORA-") || responseBody.contains("mysql") ||
+                  responseBody.contains("postgresql") || responseBody.contains("sqlite")) {
+                  logging().logToOutput("    *** POTENTIAL SQL ERROR DETECTED ***");
+                  httpEditor.responsePane().set(response.response().toByteArray());
+              }
+          }
+      } catch (Exception e) {
+          logging().logToOutput("    Error: " + e.getMessage());
+      }
+      
+      logging().logToOutput("");
+  }
+  
+  logging().logToOutput("-------------------------------------------");
+  logging().logToOutput("Completed testing " + requestCount + " string fields");
+
