@@ -220,9 +220,12 @@ source: |+
       // Send the request
       requestCount++;
       logging().logToOutput("-------------------------------------------");
-      logging().logToOutput("[" + requestCount + "/" + stringPositions.size() + "] TESTING FIELD: " + fieldName);
+      logging().logToOutput("=== TEST " + requestCount + "/" + stringPositions.size() + " ===");
+      logging().logToOutput("    Param          : " + targetParamName);
+      logging().logToOutput("    Field          : " + fieldName);
       logging().logToOutput("    Original value : \"" + originalValue + "\"");
       logging().logToOutput("    Injected value : \"" + injectedValue + "\"");
+      logging().logToOutput("    New path       : " + newPath);
       
       try {
           var response = api().http().sendRequest(modifiedRequest, httpVersion);
