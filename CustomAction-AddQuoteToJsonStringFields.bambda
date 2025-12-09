@@ -27,26 +27,22 @@ source: |+
   String pathWithoutQuery = fullPath.substring(0, queryStart);
   String queryString = fullPath.substring(queryStart + 1);
   
-  // Find URL-encoded JSON in query parameters (supports Hackvertor tags)
+  // Find URL-encoded JSON in query parameters
   String[] params = queryString.split("&");
   String targetParamName = null;
   String encodedJson = null;
   int targetParamIndex = -1;
-  boolean hasHackvertor = false;
-  String hackvertorPrefix = "";
-  String hackvertorSuffix = "";
   
   for (int i = 0; i < params.length; i++) {
       String param = params[i];
       int eqIndex = param.indexOf("=");
       if (eqIndex > 0) {
           String value = param.substring(eqIndex + 1);
-          // Detect URL-encoded JSON or Hackvertor-wrapped JSON
-          if (value.startsWith("%7b") || value.startsWith("%7B") || (value.contains("<@") && value.contains("@>"))) {
+          // Detect URL-encoded JSON
+          if (value.startsWith("%7b") || value.startsWith("%7B")) {
               targetParamName = param.substring(0, eqIndex);
               encodedJson = value;
               targetParamIndex = i;
-              hasHackvertor = value.contains("<@") && value.contains("@>");
               break;
           }
       }
@@ -57,22 +53,8 @@ source: |+
       return;
   }
   
-  // Decode the JSON (Hackvertor: extract inner JSON between tags; leave tags intact for send)
-  String decodedJson;
-  if (hasHackvertor) {
-      int openTagEnd = encodedJson.indexOf(">");
-      int closeTagStart = encodedJson.lastIndexOf("</@");
-      if (openTagEnd != -1 && closeTagStart != -1 && closeTagStart > openTagEnd) {
-          hackvertorPrefix = encodedJson.substring(0, openTagEnd + 1);
-          hackvertorSuffix = encodedJson.substring(closeTagStart);
-          decodedJson = encodedJson.substring(openTagEnd + 1, closeTagStart);
-      } else {
-          // Fallback: treat whole value as JSON if tags are malformed
-          decodedJson = encodedJson;
-      }
-  } else {
-      decodedJson = utilities().urlUtils().decode(encodedJson);
-  }
+  // Decode the JSON using Burp's URL utilities
+  String decodedJson = utilities().urlUtils().decode(encodedJson);
   
   logging().logToOutput("Original JSON: " + decodedJson);
   logging().logToOutput("-------------------------------------------");
@@ -185,13 +167,8 @@ source: |+
       // Create modified JSON with quote added to this field
       String modifiedJson = decodedJson.substring(0, positions[1]) + "'" + decodedJson.substring(positions[1]);
       
-      // URL encode the modified JSON (preserve hackvertor tags if present)
-      String encodedModifiedJson;
-      if (hasHackvertor) {
-          encodedModifiedJson = hackvertorPrefix + modifiedJson + hackvertorSuffix;
-      } else {
-          encodedModifiedJson = utilities().urlUtils().encode(modifiedJson);
-      }
+      // URL encode the modified JSON
+      String encodedModifiedJson = utilities().urlUtils().encode(modifiedJson);
       
       // Rebuild the query string with modified JSON
       StringBuilder newQueryString = new StringBuilder();
@@ -219,9 +196,6 @@ source: |+
       logging().logToOutput("    Original value : \"" + originalValue + "\"");
       logging().logToOutput("    Injected value : \"" + injectedValue + "\"");
       logging().logToOutput("    New path       : " + newPath);
-      if (hasHackvertor) {
-          logging().logToOutput("    Hackvertor     : detected; tags left unencoded");
-      }
       
       try {
           var response = api().http().sendRequest(modifiedRequest, httpVersion);
