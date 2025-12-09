@@ -1,0 +1,63 @@
+id: 2ffec23a-5012-44fb-9b41-cd453218f88a
+name: Add Quote to All Params
+function: CUSTOM_ACTION
+location: REPEATER
+source: |+
+  /**
+   * Iterates through query, body, multipart, and JSON parameters and adds a single quote
+   * to each one incrementally, sending a request for each modification.
+   * 
+   * Useful for SQL injection testing.
+   *
+   * @author quan.m.le
+   **/
+  
+  var request = requestResponse.request();
+  var httpVersion = request.httpVersion().equals("HTTP/2") ? HttpMode.HTTP_2 : HttpMode.HTTP_1;
+  
+  // Get all parameters
+  var allParams = request.parameters();
+  var paramsToTest = new java.util.ArrayList();
+  
+  // Filter interesting parameters
+  for (var param : allParams) {
+      var type = param.type();
+      if (type == HttpParameterType.URL || 
+          type == HttpParameterType.BODY || 
+          type == HttpParameterType.JSON || 
+          type == HttpParameterType.MULTIPART_ATTRIBUTE) {
+          paramsToTest.add(param);
+      }
+  }
+  
+  logging().logToOutput("Found " + paramsToTest.size() + " parameters to test.");
+  
+  int requestCount = 0;
+  int total = paramsToTest.size();
+  
+  for (int i = 0; i < total; i++) {
+      var param = (HttpParameter) paramsToTest.get(i);
+      String originalValue = param.value();
+      String injectedValue = originalValue + "'";
+      
+      // Create new parameter with injected value
+      var newParam = HttpParameter.parameter(param.name(), injectedValue, param.type());
+      
+      // Create modified request
+      var modifiedRequest = request.withParameter(newParam);
+      
+      requestCount++;
+      
+      try {
+          var response = api().http().sendRequest(modifiedRequest, httpVersion);
+          int statusCode = response.response().statusCode();
+          int responseLength = response.response().body() == null ? 0 : response.response().body().length();
+          
+          // Compact Log
+          logging().logToOutput(String.format("[%d/%d] Param: %s (%s) | Val: \"%s\" -> \"%s\" | Status: %d | Len: %d",
+              requestCount, total, param.name(), param.type().toString(), originalValue, injectedValue, statusCode, responseLength));
+              
+      } catch (Exception e) {
+          logging().logToOutput(String.format("[%d/%d] Param: %s | Error: %s", requestCount, total, param.name(), e.getMessage()));
+      }
+  }

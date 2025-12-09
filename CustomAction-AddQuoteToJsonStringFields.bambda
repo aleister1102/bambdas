@@ -189,42 +189,21 @@ source: |+
       
       // Send the request
       requestCount++;
-      logging().logToOutput("-------------------------------------------");
-      logging().logToOutput("=== TEST " + requestCount + "/" + stringPositions.size() + " ===");
-      logging().logToOutput("    Param          : " + targetParamName);
-      logging().logToOutput("    Field          : " + fieldName);
-      logging().logToOutput("    Original value : \"" + originalValue + "\"");
-      logging().logToOutput("    Injected value : \"" + injectedValue + "\"");
-      logging().logToOutput("    New path       : " + newPath);
       
       try {
           var response = api().http().sendRequest(modifiedRequest, httpVersion);
           int statusCode = response.response().statusCode();
           int responseLength = response.response().body() == null ? 0 : response.response().body().length();
-          String responseBody = response.response().bodyToString();
-          if (responseBody == null) {
-              responseBody = "";
-          }
           
-          logging().logToOutput("    HTTP Status    : " + statusCode);
-          logging().logToOutput("    Response Length: " + responseLength + " bytes");
-          
-          // Show truncated response body (first 500 chars)
-          String truncatedBody = responseBody;
-          if (truncatedBody.length() > 500) {
-              truncatedBody = truncatedBody.substring(0, 500) + "... [truncated]";
-          }
-          logging().logToOutput("    Response Body  :");
-          logging().logToOutput("    " + truncatedBody.replace("\n", "\n    "));
+          logging().logToOutput(String.format("[%d/%d] Param: %s Field: %s | Val: \"%s\" -> \"%s\" | Status: %d | Len: %d",
+              requestCount, stringPositions.size(), targetParamName, fieldName, originalValue, injectedValue, statusCode, responseLength));
           
           // Update response pane with this response
           httpEditor.responsePane().set(response.response().toByteArray());
           
       } catch (Exception e) {
-          logging().logToOutput("    [ERROR] Request failed: " + e.getMessage());
+          logging().logToOutput(String.format("[%d/%d] Param: %s Field: %s | Error: %s", requestCount, stringPositions.size(), targetParamName, fieldName, e.getMessage()));
       }
-      
-      logging().logToOutput("");
   }
   
   logging().logToOutput("===========================================");
