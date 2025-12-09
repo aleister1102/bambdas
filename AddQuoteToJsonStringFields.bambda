@@ -63,7 +63,8 @@ source: |+
   // We'll track positions where we find string values
   var stringPositions = new java.util.ArrayList();
   var fieldNames = new java.util.ArrayList();
-  
+  var fieldValues = new java.util.ArrayList();
+
   // Simple parser to find "key":"value" patterns
   int pos = 0;
   while (pos < decodedJson.length()) {
@@ -98,8 +99,10 @@ source: |+
       }
       
       if (valueEnd > valueStart) {
+          String fieldValue = decodedJson.substring(valueStart, valueEnd);
           stringPositions.add(new int[]{valueStart, valueEnd});
           fieldNames.add(keyName);
+          fieldValues.add(fieldValue);
       }
       
       pos = valueEnd + 1;
@@ -131,8 +134,10 @@ source: |+
                       }
                   }
                   if (!isDuplicate) {
+                      String arrayValue = decodedJson.substring(valueStart, valueEnd);
                       stringPositions.add(new int[]{valueStart, valueEnd});
                       fieldNames.add("array_item");
+                      fieldValues.add(arrayValue);
                   }
               }
           }
@@ -153,15 +158,32 @@ source: |+
               }
           }
           if (!isDuplicate) {
+              String arrayValue = decodedJson.substring(valueStart, valueEnd);
               stringPositions.add(new int[]{valueStart, valueEnd});
               fieldNames.add("array_item");
+              fieldValues.add(arrayValue);
           }
       }
       pos = bracketStart + 2;
   }
   
-  logging().logToOutput("Found " + stringPositions.size() + " string fields to test");
-  logging().logToOutput("-------------------------------------------");
+  logging().logToOutput("===========================================");
+  logging().logToOutput("FOUND " + stringPositions.size() + " STRING FIELDS TO TEST");
+  logging().logToOutput("===========================================");
+  logging().logToOutput("");
+  
+  // List all fields that will be tested
+  logging().logToOutput("Fields to be tested:");
+  for (int i = 0; i < stringPositions.size(); i++) {
+      String fn = (String) fieldNames.get(i);
+      String fv = (String) fieldValues.get(i);
+      logging().logToOutput("  [" + (i + 1) + "] " + fn + " = \"" + fv + "\"");
+  }
+  logging().logToOutput("");
+  logging().logToOutput("===========================================");
+  logging().logToOutput("STARTING INJECTION TESTS");
+  logging().logToOutput("===========================================");
+  logging().logToOutput("");
   
   int requestCount = 0;
   
@@ -169,6 +191,8 @@ source: |+
   for (int i = 0; i < stringPositions.size(); i++) {
       int[] positions = (int[]) stringPositions.get(i);
       String fieldName = (String) fieldNames.get(i);
+      String originalValue = (String) fieldValues.get(i);
+      String injectedValue = originalValue + "'";
       
       // Create modified JSON with quote added to this field
       String modifiedJson = decodedJson.substring(0, positions[1]) + "'" + decodedJson.substring(positions[1]);
@@ -195,30 +219,72 @@ source: |+
       
       // Send the request
       requestCount++;
-      logging().logToOutput("[" + requestCount + "] Testing field: " + fieldName);
+      logging().logToOutput("-------------------------------------------");
+      logging().logToOutput("[" + requestCount + "/" + stringPositions.size() + "] TESTING FIELD: " + fieldName);
+      logging().logToOutput("    Original value : \"" + originalValue + "\"");
+      logging().logToOutput("    Injected value : \"" + injectedValue + "\"");
       
       try {
           var response = api().http().sendRequest(modifiedRequest, httpVersion);
           int statusCode = response.response().statusCode();
           int responseLength = response.response().body().length();
           
-          logging().logToOutput("    Status: " + statusCode + " | Length: " + responseLength);
+          logging().logToOutput("    HTTP Status    : " + statusCode);
+          logging().logToOutput("    Response Length: " + responseLength + " bytes");
           
           // Check for SQL error indicators in response
           String responseBody = response.response().bodyToString();
-          if (responseBody.contains("SQL") || responseBody.contains("syntax") || 
-              responseBody.contains("error") || responseBody.contains("exception") ||
-              responseBody.contains("ORA-") || responseBody.contains("mysql") ||
-              responseBody.contains("postgresql") || responseBody.contains("sqlite")) {
-              logging().logToOutput("    *** POTENTIAL SQL ERROR DETECTED ***");
+          boolean sqlErrorFound = false;
+          
+          if (responseBody.contains("SQL")) {
+              logging().logToOutput("    [!] Found 'SQL' in response");
+              sqlErrorFound = true;
+          }
+          if (responseBody.contains("syntax")) {
+              logging().logToOutput("    [!] Found 'syntax' in response");
+              sqlErrorFound = true;
+          }
+          if (responseBody.contains("ORA-")) {
+              logging().logToOutput("    [!] Found 'ORA-' (Oracle error) in response");
+              sqlErrorFound = true;
+          }
+          if (responseBody.contains("mysql")) {
+              logging().logToOutput("    [!] Found 'mysql' in response");
+              sqlErrorFound = true;
+          }
+          if (responseBody.contains("postgresql")) {
+              logging().logToOutput("    [!] Found 'postgresql' in response");
+              sqlErrorFound = true;
+          }
+          if (responseBody.contains("sqlite")) {
+              logging().logToOutput("    [!] Found 'sqlite' in response");
+              sqlErrorFound = true;
+          }
+          if (responseBody.contains("SQLSTATE")) {
+              logging().logToOutput("    [!] Found 'SQLSTATE' in response");
+              sqlErrorFound = true;
+          }
+          if (responseBody.contains("Query failed")) {
+              logging().logToOutput("    [!] Found 'Query failed' in response");
+              sqlErrorFound = true;
+          }
+          
+          if (sqlErrorFound) {
+              logging().logToOutput("");
+              logging().logToOutput("    *** POTENTIAL SQL INJECTION FOUND! ***");
+              logging().logToOutput("    *** Field: " + fieldName + " ***");
+              logging().logToOutput("");
               httpEditor.responsePane().set(response.response().toByteArray());
+          } else {
+              logging().logToOutput("    Result: No obvious SQL errors detected");
           }
       } catch (Exception e) {
-          logging().logToOutput("    Error: " + e.getMessage());
+          logging().logToOutput("    [ERROR] Request failed: " + e.getMessage());
       }
       
       logging().logToOutput("");
   }
   
-  logging().logToOutput("-------------------------------------------");
-  logging().logToOutput("Completed testing " + requestCount + " string fields");
+  logging().logToOutput("===========================================");
+  logging().logToOutput("COMPLETED: Tested " + requestCount + " string fields");
+  logging().logToOutput("===========================================");
