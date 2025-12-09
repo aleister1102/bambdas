@@ -61,8 +61,8 @@ source: |+
   
   // Find all string values in JSON by looking for ":"value" patterns
   // We'll track positions where we find string values
-  var stringPositions = new java.util.ArrayList<int[]>();
-  var fieldNames = new java.util.ArrayList<String>();
+  var stringPositions = new java.util.ArrayList();
+  var fieldNames = new java.util.ArrayList();
   
   // Simple parser to find "key":"value" patterns
   int pos = 0;
