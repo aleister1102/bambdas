@@ -228,56 +228,22 @@ source: |+
           var response = api().http().sendRequest(modifiedRequest, httpVersion);
           int statusCode = response.response().statusCode();
           int responseLength = response.response().body().length();
+          String responseBody = response.response().bodyToString();
           
           logging().logToOutput("    HTTP Status    : " + statusCode);
           logging().logToOutput("    Response Length: " + responseLength + " bytes");
           
-          // Check for SQL error indicators in response
-          String responseBody = response.response().bodyToString();
-          boolean sqlErrorFound = false;
+          // Show truncated response body (first 500 chars)
+          String truncatedBody = responseBody;
+          if (truncatedBody.length() > 500) {
+              truncatedBody = truncatedBody.substring(0, 500) + "... [truncated]";
+          }
+          logging().logToOutput("    Response Body  :");
+          logging().logToOutput("    " + truncatedBody.replace("\n", "\n    "));
           
-          if (responseBody.contains("SQL")) {
-              logging().logToOutput("    [!] Found 'SQL' in response");
-              sqlErrorFound = true;
-          }
-          if (responseBody.contains("syntax")) {
-              logging().logToOutput("    [!] Found 'syntax' in response");
-              sqlErrorFound = true;
-          }
-          if (responseBody.contains("ORA-")) {
-              logging().logToOutput("    [!] Found 'ORA-' (Oracle error) in response");
-              sqlErrorFound = true;
-          }
-          if (responseBody.contains("mysql")) {
-              logging().logToOutput("    [!] Found 'mysql' in response");
-              sqlErrorFound = true;
-          }
-          if (responseBody.contains("postgresql")) {
-              logging().logToOutput("    [!] Found 'postgresql' in response");
-              sqlErrorFound = true;
-          }
-          if (responseBody.contains("sqlite")) {
-              logging().logToOutput("    [!] Found 'sqlite' in response");
-              sqlErrorFound = true;
-          }
-          if (responseBody.contains("SQLSTATE")) {
-              logging().logToOutput("    [!] Found 'SQLSTATE' in response");
-              sqlErrorFound = true;
-          }
-          if (responseBody.contains("Query failed")) {
-              logging().logToOutput("    [!] Found 'Query failed' in response");
-              sqlErrorFound = true;
-          }
+          // Update response pane with this response
+          httpEditor.responsePane().set(response.response().toByteArray());
           
-          if (sqlErrorFound) {
-              logging().logToOutput("");
-              logging().logToOutput("    *** POTENTIAL SQL INJECTION FOUND! ***");
-              logging().logToOutput("    *** Field: " + fieldName + " ***");
-              logging().logToOutput("");
-              httpEditor.responsePane().set(response.response().toByteArray());
-          } else {
-              logging().logToOutput("    Result: No obvious SQL errors detected");
-          }
       } catch (Exception e) {
           logging().logToOutput("    [ERROR] Request failed: " + e.getMessage());
       }
