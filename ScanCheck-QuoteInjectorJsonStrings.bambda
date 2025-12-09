@@ -1,0 +1,231 @@
+id: 7c3e2a6f-4d7b-4e9c-9c6f-8c5f41f05c3b
+name: JSON Quote Injector Scanner
+function: SCAN_CHECK_ACTIVE_PER_HOST
+location: SCANNER
+source: |+
+  /**
+   * Active scan check: inject a single quote at the end of every JSON string field
+   * found in URL-encoded JSON query parameters, one field at a time.
+   *
+   * If responses return SQL-style errors or server errors (>=500), an issue is raised.
+   */
+  
+  // Helper: collect string positions and names from decoded JSON
+  class JsonStringCollector {
+      java.util.List positions = new java.util.ArrayList();
+      java.util.List names = new java.util.ArrayList();
+      java.util.List values = new java.util.ArrayList();
+  
+      void parse(String decodedJson) {
+          int pos = 0;
+          while (pos < decodedJson.length()) {
+              int colonQuote = decodedJson.indexOf(":\"", pos);
+              if (colonQuote == -1) break;
+  
+              int keyEnd = colonQuote;
+              int keyStart = decodedJson.lastIndexOf("\"", keyEnd - 1);
+              if (keyStart == -1) {
+                  pos = colonQuote + 2;
+                  continue;
+              }
+              String keyName = decodedJson.substring(keyStart + 1, keyEnd);
+  
+              int valueStart = colonQuote + 2;
+              int valueEnd = valueStart;
+              while (valueEnd < decodedJson.length()) {
+                  int nextQuote = decodedJson.indexOf("\"", valueEnd);
+                  if (nextQuote == -1) break;
+                  if (nextQuote > 0 && decodedJson.charAt(nextQuote - 1) == '\\') {
+                      valueEnd = nextQuote + 1;
+                      continue;
+                  }
+                  valueEnd = nextQuote;
+                  break;
+              }
+  
+              if (valueEnd > valueStart) {
+                  positions.add(new int[]{valueStart, valueEnd});
+                  names.add(keyName);
+                  values.add(decodedJson.substring(valueStart, valueEnd));
+              }
+  
+              pos = valueEnd + 1;
+          }
+  
+          // Also scan array strings ["a","b"]
+          pos = 0;
+          while (pos < decodedJson.length()) {
+              int bracketStart = decodedJson.indexOf("[\"", pos);
+              if (bracketStart == -1) {
+                  int commaQuote = decodedJson.indexOf(",\"", pos);
+                  if (commaQuote == -1) break;
+                  int lastBracket = decodedJson.lastIndexOf("[", commaQuote);
+                  int lastCloseBracket = decodedJson.lastIndexOf("]", commaQuote);
+                  if (lastBracket > lastCloseBracket) {
+                      int valueStart = commaQuote + 2;
+                      int valueEnd = decodedJson.indexOf("\"", valueStart);
+                      if (valueEnd > valueStart) {
+                          boolean dup = false;
+                          for (int i = 0; i < positions.size(); i++) {
+                              int[] p = (int[]) positions.get(i);
+                              if (p[0] == valueStart) { dup = true; break; }
+                          }
+                          if (!dup) {
+                              positions.add(new int[]{valueStart, valueEnd});
+                              names.add("array_item");
+                              values.add(decodedJson.substring(valueStart, valueEnd));
+                          }
+                      }
+                  }
+                  pos = commaQuote + 2;
+                  continue;
+              }
+  
+              int valueStart = bracketStart + 2;
+              int valueEnd = decodedJson.indexOf("\"", valueStart);
+              if (valueEnd > valueStart) {
+                  boolean dup = false;
+                  for (int i = 0; i < positions.size(); i++) {
+                      int[] p = (int[]) positions.get(i);
+                      if (p[0] == valueStart) { dup = true; break; }
+                  }
+                  if (!dup) {
+                      positions.add(new int[]{valueStart, valueEnd});
+                      names.add("array_item");
+                      values.add(decodedJson.substring(valueStart, valueEnd));
+                  }
+              }
+              pos = bracketStart + 2;
+          }
+      }
+  }
+  
+  // Baseline request/response
+  HttpRequestResponse base = http.sendRequest(requestResponse.request());
+  int baselineStatus = base != null && base.hasResponse() ? base.response().statusCode() : -1;
+  int baselineLength = base != null && base.hasResponse() ? base.response().body().length() : -1;
+  
+  String fullPath = requestResponse.request().path();
+  int queryStart = fullPath.indexOf("?");
+  if (queryStart == -1) {
+      return AuditResult.auditResult(); // no query params
+  }
+  
+  String pathWithoutQuery = fullPath.substring(0, queryStart);
+  String queryString = fullPath.substring(queryStart + 1);
+  
+  String[] params = queryString.split("&");
+  String targetParamName = null;
+  String encodedJson = null;
+  int targetParamIndex = -1;
+  
+  for (int i = 0; i < params.length; i++) {
+      String param = params[i];
+      int eqIndex = param.indexOf("=");
+      if (eqIndex > 0) {
+          String value = param.substring(eqIndex + 1);
+          if (value.startsWith("%7b") || value.startsWith("%7B")) {
+              targetParamName = param.substring(0, eqIndex);
+              encodedJson = value;
+              targetParamIndex = i;
+              break;
+          }
+      }
+  }
+  
+  if (encodedJson == null) {
+      return AuditResult.auditResult();
+  }
+  
+  String decodedJson = utilities().urlUtils().decode(encodedJson);
+  JsonStringCollector collector = new JsonStringCollector();
+  collector.parse(decodedJson);
+  
+  if (collector.positions.isEmpty()) {
+      return AuditResult.auditResult();
+  }
+  
+  java.util.List<AuditIssue> issues = new java.util.ArrayList<>();
+  
+  for (int i = 0; i < collector.positions.size(); i++) {
+      int[] pos = (int[]) collector.positions.get(i);
+      String fieldName = (String) collector.names.get(i);
+      String originalValue = (String) collector.values.get(i);
+  
+      // inject quote
+      String modifiedJson = decodedJson.substring(0, pos[1]) + "'" + decodedJson.substring(pos[1]);
+      String encodedModifiedJson = utilities().urlUtils().encode(modifiedJson);
+  
+      StringBuilder newQuery = new StringBuilder();
+      for (int j = 0; j < params.length; j++) {
+          if (j > 0) newQuery.append("&");
+          if (j == targetParamIndex) {
+              newQuery.append(targetParamName).append("=").append(encodedModifiedJson);
+          } else {
+              newQuery.append(params[j]);
+          }
+      }
+  
+      String newPath = pathWithoutQuery + "?" + newQuery.toString();
+      HttpRequest attackRequest = requestResponse.request().withPath(newPath);
+      HttpRequestResponse attackResp = http.sendRequest(attackRequest);
+      if (attackResp == null || !attackResp.hasResponse()) {
+          continue;
+      }
+  
+      int status = attackResp.response().statusCode();
+      String body = attackResp.response().bodyToString();
+      int bodyLen = attackResp.response().body().length();
+  
+      boolean interesting = false;
+      StringBuilder evidence = new StringBuilder();
+  
+      if (status >= 500) {
+          interesting = true;
+          evidence.append("Server error status ").append(status).append("\\n");
+      }
+      if (baselineStatus != -1 && status != baselineStatus) {
+          interesting = true;
+          evidence.append("Status changed from ").append(baselineStatus).append(" to ").append(status).append("\\n");
+      }
+      if (baselineLength != -1 && Math.abs(bodyLen - baselineLength) > 50) {
+          interesting = true;
+          evidence.append("Response length changed from ").append(baselineLength).append(" to ").append(bodyLen).append("\\n");
+      }
+  
+      String[] errMarkers = {"SQL", "syntax", "ORA-", "mysql", "postgresql", "sqlite", "SQLSTATE", "Query failed", "exception", "error"};
+      for (String marker : errMarkers) {
+          if (body != null && body.toLowerCase().contains(marker.toLowerCase())) {
+              interesting = true;
+              evidence.append("Response contains marker: ").append(marker).append("\\n");
+          }
+      }
+  
+      if (interesting) {
+          String truncated = body == null ? "" : (body.length() > 500 ? body.substring(0, 500) + "...[truncated]" : body);
+          AuditIssue issue = AuditIssue.auditIssue(
+                  "JSON string field quote injection",
+                  ("Field: " + fieldName + "\\n" +
+                          "Injected value: " + originalValue + "'\\n" +
+                          "Path: " + newPath + "\\n" +
+                          "Evidence:\\n" + evidence.toString() +
+                          "\\nResponse snippet:\\n" + truncated),
+                  "Validate and parameterize JSON inputs; reject unsafe characters; use prepared statements.",
+                  requestResponse.request().url(),
+                  AuditIssueSeverity.MEDIUM,
+                  AuditIssueConfidence.TENTATIVE,
+                  null,
+                  null,
+                  AuditIssueSeverity.MEDIUM,
+                  attackResp
+          );
+          issues.add(issue);
+      }
+  }
+  
+  if (issues.isEmpty()) {
+      return AuditResult.auditResult();
+  }
+  
+  return AuditResult.auditResult(issues);
+
