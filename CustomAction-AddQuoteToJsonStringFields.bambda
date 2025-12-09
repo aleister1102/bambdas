@@ -230,8 +230,12 @@ source: |+
       try {
           var response = api().http().sendRequest(modifiedRequest, httpVersion);
           int statusCode = response.response().statusCode();
-          int responseLength = response.response().body().length();
+          byte[] bodyBytes = response.response().body();
+          int responseLength = bodyBytes == null ? 0 : bodyBytes.length;
           String responseBody = response.response().bodyToString();
+          if (responseBody == null) {
+              responseBody = "";
+          }
           
           logging().logToOutput("    HTTP Status    : " + statusCode);
           logging().logToOutput("    Response Length: " + responseLength + " bytes");
