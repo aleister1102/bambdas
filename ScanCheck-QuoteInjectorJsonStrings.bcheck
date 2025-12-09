@@ -1,0 +1,48 @@
+metadata:
+    language: v2-beta
+    name: "JSON Quote Injector (Bulk)"
+    description: "Active scan check that injects a single quote into JSON string values found in query parameters to test for SQL injection or errors. Note: This check injects into all discovered fields simultaneously."
+    tags: "active", "json", "sqli", "injection"
+
+define:
+    # Regex for injection into object values: "key":"value" -> "key":"value'"
+    # Regex for injection into array values: ["value"] or ,"value" -> ["value'"] or ,"value'"
+    # We use regex_replace to inject ' into all matches.
+
+given request then
+    send request called baseline
+
+    run for each {param} in {query_parameters}
+        # Check if the parameter value looks like a JSON object (starts with {)
+        if {param.value} matches "^\s*\{.*\}\s*$" then
+            
+            # 1. Inject into object values: :"value" -> :"value'"
+            # We use a capture group for the value content
+            define payload_step1 = regex_replace({param.value}, ":\s*\"([^\"]*)\"", ":\"$1'\"")
+            
+            # 2. Inject into array values/lists: ["value"] or ,"value" -> ["value'"] or ,"value'"
+            # Lookbehind for [ or , followed by optional space, then "value"
+            define payload_step2 = regex_replace({payload_step1}, "(?<=\[|,)\s*\"([^\"]*)\"", "\"$1'\"")
+
+            send request called attack:
+                replacing query_parameter {param.name} with {payload_step2}
+
+            # Analysis
+            if {attack.response.status_code} is not {baseline.response.status_code} or
+               {attack.response.status_code} >= 500 or
+               {attack.response.body} matches "(?i)(SQL|syntax|ORA-|mysql|postgresql|sqlite|SQLSTATE|Query failed|exception|error)"
+            then
+                # Filter out cases where baseline also had the error if possible, but for now simple check
+                # We can check if the error is NOT in the baseline
+                if not({baseline.response.body} matches "(?i)(SQL|syntax|ORA-|mysql|postgresql|sqlite|SQLSTATE|Query failed|exception|error)") or
+                   {attack.response.status_code} is not {baseline.response.status_code}
+                then
+                    report issue:
+                        severity: medium
+                        confidence: tentative
+                        detail: "JSON injection triggered an anomaly (Status change or Error message)."
+                        evidence: {attack.response.body}
+                end if
+            end if
+        end if
+    end run
