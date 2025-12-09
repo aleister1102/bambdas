@@ -66,51 +66,21 @@ source: |+
   var fieldNames = new java.util.ArrayList();
   var fieldValues = new java.util.ArrayList();
 
-  // Simple parser to find "key":"value" patterns
-  int pos = 0;
-  while (pos < decodedJson.length()) {
-      // Find next colon followed by quote (indicating string value)
-      int colonQuote = decodedJson.indexOf(":\"", pos);
-      if (colonQuote == -1) break;
-      
-      // Find the key name (look backwards for the opening quote of the key)
-      int keyEnd = colonQuote;
-      int keyStart = decodedJson.lastIndexOf("\"", keyEnd - 1);
-      if (keyStart == -1) {
-          pos = colonQuote + 2;
-          continue;
-      }
-      String keyName = decodedJson.substring(keyStart + 1, keyEnd);
-      
-      // Find the value (starts after :")
-      int valueStart = colonQuote + 2;
-      int valueEnd = valueStart;
-      
-      // Find closing quote (handle escaped quotes)
-      while (valueEnd < decodedJson.length()) {
-          int nextQuote = decodedJson.indexOf("\"", valueEnd);
-          if (nextQuote == -1) break;
-          // Check if escaped
-          if (nextQuote > 0 && decodedJson.charAt(nextQuote - 1) == '\\') {
-              valueEnd = nextQuote + 1;
-              continue;
-          }
-          valueEnd = nextQuote;
-          break;
-      }
-      
-      if (valueEnd > valueStart) {
-          String fieldValue = decodedJson.substring(valueStart, valueEnd);
-          stringPositions.add(new int[]{valueStart, valueEnd});
-          fieldNames.add(keyName);
-          fieldValues.add(fieldValue);
-      }
-      
-      pos = valueEnd + 1;
+  // Regex parser to find "key":"value" patterns (string values)
+  java.util.regex.Pattern p = java.util.regex.Pattern.compile("\"([^\"]+)\"\\s*:\\s*\"([^\"]*)\"");
+  java.util.regex.Matcher m = p.matcher(decodedJson);
+  while (m.find()) {
+      int valueStart = m.start(2);
+      int valueEnd = m.end(2);
+      String keyName = m.group(1);
+      String fieldValue = m.group(2);
+      stringPositions.add(new int[]{valueStart, valueEnd});
+      fieldNames.add(keyName);
+      fieldValues.add(fieldValue);
   }
   
   // Also find strings in arrays like ["value1","value2"]
-  pos = 0;
+  int pos = 0;
   while (pos < decodedJson.length()) {
       int bracketStart = decodedJson.indexOf("[\"", pos);
       if (bracketStart == -1) {
