@@ -124,7 +124,7 @@ source: |+
                   // Check if not already tracked
                   boolean isDuplicate = false;
                   for (int i = 0; i < stringPositions.size(); i++) {
-                      int[] existingPos = stringPositions.get(i);
+                      int[] existingPos = (int[]) stringPositions.get(i);
                       if (existingPos[0] == valueStart) {
                           isDuplicate = true;
                           break;
@@ -146,7 +146,7 @@ source: |+
           // Check if not already tracked
           boolean isDuplicate = false;
           for (int i = 0; i < stringPositions.size(); i++) {
-              int[] existingPos = stringPositions.get(i);
+              int[] existingPos = (int[]) stringPositions.get(i);
               if (existingPos[0] == valueStart) {
                   isDuplicate = true;
                   break;
@@ -167,8 +167,8 @@ source: |+
   
   // Iterate through each string field and add a quote
   for (int i = 0; i < stringPositions.size(); i++) {
-      int[] positions = stringPositions.get(i);
-      String fieldName = fieldNames.get(i);
+      int[] positions = (int[]) stringPositions.get(i);
+      String fieldName = (String) fieldNames.get(i);
       
       // Create modified JSON with quote added to this field
       String modifiedJson = decodedJson.substring(0, positions[1]) + "'" + decodedJson.substring(positions[1]);
