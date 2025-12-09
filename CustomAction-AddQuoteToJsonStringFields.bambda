@@ -240,8 +240,7 @@ source: |+
       try {
           var response = api().http().sendRequest(modifiedRequest, httpVersion);
           int statusCode = response.response().statusCode();
-          byte[] bodyBytes = response.response().body();
-          int responseLength = bodyBytes == null ? 0 : bodyBytes.length;
+          int responseLength = response.response().body() == null ? 0 : response.response().body().length();
           String responseBody = response.response().bodyToString();
           if (responseBody == null) {
               responseBody = "";
