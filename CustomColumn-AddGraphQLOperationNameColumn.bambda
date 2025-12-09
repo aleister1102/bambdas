@@ -1,5 +1,5 @@
 id: fb85ee0d-1924-4825-983f-cbaf1b019c4e
-name: AddGraphQLOperationNameColumn
+name: Add GraphQL Operation Name Column
 function: CUSTOM_COLUMN
 location: PROXY_HTTP_HISTORY
 source: |+

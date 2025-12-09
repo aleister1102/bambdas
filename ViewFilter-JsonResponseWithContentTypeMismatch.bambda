@@ -1,5 +1,5 @@
 id: 6fccbd19-880c-4ace-9aca-d0d0c3f0d18d
-name: json-response-w-content-type-mismatch
+name: JSON Response With Content Type Mismatch
 function: VIEW_FILTER
 location: PROXY_HTTP_HISTORY
 source: |+

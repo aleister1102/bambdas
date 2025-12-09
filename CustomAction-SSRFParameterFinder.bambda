@@ -1,0 +1,61 @@
+id: b089c2e1-45f8-4b7b-9c6d-123456789004
+name: SSRF Parameter Finder
+function: CUSTOM_ACTION
+location: REPEATER
+source: |+
+  // Caption: SSRF Parameter Finder
+  // Description: Scan request and response for parameter names commonly used for SSRF and print matches.
+  
+  var ssrfNames = new java.util.HashSet<>(java.util.Arrays.asList(
+      "url", "uri", "path", "domain", "redirect", "callback", "return",
+      "next", "data", "continue", "window", "port", "website", "host", "forward", "to"
+  ));
+  var found = new java.util.HashSet<String>();
+  
+  // Helper to check/add parameter names
+  java.util.function.Consumer<String> check = (param) -> {
+      if (param == null) return;
+      String p = param.trim().toLowerCase();
+      if (ssrfNames.contains(p)) found.add(p);
+  };
+  
+  // --- Scan URL query ---
+  String url = requestResponse.request().url();
+  int qPos = url.indexOf('?');
+  if (qPos != -1 && qPos < url.length() - 1) {
+      String query = url.substring(qPos + 1);
+      for (String pair : query.split("&")) {
+          int eq = pair.indexOf('=');
+          if (eq > 0) check.accept(pair.substring(0, eq));
+          else if (!pair.isEmpty()) check.accept(pair);
+      }
+  }
+  
+  // --- Scan body (form-encoded) ---
+  String body = requestResponse.request().bodyToString();
+  if (body.contains("=") && body.contains("&")) {
+      for (String pair : body.split("&")) {
+          int eq = pair.indexOf('=');
+          if (eq > 0) check.accept(pair.substring(0, eq));
+          else if (!pair.isEmpty()) check.accept(pair);
+      }
+  }
+  
+  // --- Scan body (JSON keys, not nested) ---
+  var jsonKey = java.util.regex.Pattern.compile("\"([^\"]+)\"\\s*:");
+  var m = jsonKey.matcher(body);
+  while (m.find()) check.accept(m.group(1));
+  
+  // --- Optionally scan response for JSON keys ---
+  String respBody = requestResponse.response().bodyToString();
+  var m2 = jsonKey.matcher(respBody);
+  while (m2.find()) check.accept(m2.group(1));
+  
+  // --- Print result ---
+  if (found.isEmpty()) {
+      logging.logToOutput("No SSRF-prone parameter names found.");
+  } else {
+      StringBuilder sb = new StringBuilder("Possible SSRF parameters found:\n");
+      for (String p : found) sb.append("- ").append(p).append("\n");
+      logging.logToOutput(sb.toString());
+  }

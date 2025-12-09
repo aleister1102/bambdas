@@ -1,5 +1,5 @@
 id: 28096ab5-87f3-407e-9d10-b49f17bc7d02
-name: GraphQL
+name: GraphQL Request Details
 function: CUSTOM_COLUMN
 location: PROXY_HTTP_HISTORY
 source: |+

@@ -9,6 +9,16 @@ This repository contains a collection of Bambdas (Burp Suite custom scripts) for
 - **Scan Checks**: Custom passive or active scan checks.
 - **View Filters**: Filters to show/hide items in Burp's tables based on specific criteria.
 
+## Naming Convention
+
+Files in this repository follow the convention `Type-PascalCaseName.extension`, where `Type` corresponds to the Bambda category:
+
+- `CustomAction-Name.bambda`
+- `CustomColumn-Name.bambda`
+- `ScanCheck-Name.bambda` (Java-based Scan Checks)
+- `ScanCheck-Name.bcheck` (BCheck DSL Scan Checks)
+- `ViewFilter-Name.bambda`
+
 ## Usage
 
 Load these scripts into Burp Suite's Bambda interface corresponding to their type (e.g., HTTP Proxy > History > Filter, or Repeater > Custom Action).

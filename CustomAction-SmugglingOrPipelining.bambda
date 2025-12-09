@@ -1,5 +1,5 @@
 id: ff209ccd-56ae-4a0e-bd95-55f5041fdd87
-name: SmugglingOrPipelining
+name: Smuggling or Pipelining
 function: CUSTOM_ACTION
 location: REPEATER
 source: |+

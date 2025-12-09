@@ -1,5 +1,5 @@
 id: de663b90-bf2f-4665-af01-1081d1dca7d2
-name: Probe for race condition
+name: Probe For Race Condition
 function: CUSTOM_ACTION
 location: REPEATER
 source: |+

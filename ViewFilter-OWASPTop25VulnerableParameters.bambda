@@ -1,5 +1,5 @@
 id: d8113109-1602-4381-a7fd-d53c02e41b23
-name: OWASPTop25VulnerableParameters
+name: OWASP Top 25 Vulnerable Parameters
 function: VIEW_FILTER
 location: PROXY_HTTP_HISTORY
 source: |+

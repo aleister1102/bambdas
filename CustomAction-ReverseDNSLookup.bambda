@@ -1,0 +1,30 @@
+id: b089c2e1-45f8-4b7b-9c6d-123456789005
+name: Reverse DNS Lookup
+function: CUSTOM_ACTION
+location: REPEATER
+source: |+
+    // Caption: Reverse DNS Lookup
+    // Description: Takes the host from the HTTP service, performs a reverse DNS lookup, and prints the resolved hostname.
+
+    try {
+        var service = requestResponse.httpService();
+        String ipOrHost = service.host();
+
+        // If host is already an IP, fine; if not, resolve to IP first
+        String resolvedIp = ipOrHost;
+        if (!ipOrHost.matches("\\d+\\.\\d+\\.\\d+\\.\\d+")) {
+            // Resolve hostname to IP
+            try {
+                resolvedIp = java.net.InetAddress.getByName(ipOrHost).getHostAddress();
+            } catch (Exception e) {
+                logging.logToError("Could not resolve host to IP: " + ipOrHost);
+            }
+        }
+
+        // Perform reverse DNS lookup
+        String reverse = java.net.InetAddress.getByName(resolvedIp).getCanonicalHostName();
+        logging.logToOutput("IP: " + resolvedIp + "\nReverse DNS: " + reverse);
+
+    } catch (Exception e) {
+        logging.logToError("Reverse DNS lookup failed: " + e);
+    }

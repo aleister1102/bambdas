@@ -1,5 +1,5 @@
 id: e8024315-a0ce-4733-a605-b7878bfa3fa9
-name: DetectSuspiciousJSFunctions
+name: Detect Suspicious JS Functions
 function: VIEW_FILTER
 location: PROXY_HTTP_HISTORY
 source: |+

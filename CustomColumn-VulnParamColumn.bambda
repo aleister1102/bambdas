@@ -1,5 +1,5 @@
 id: d87df200-9500-4748-8563-63e421ff4d2b
-name: Vuln Param Column
+name: Vulnerable Parameter Column
 function: CUSTOM_COLUMN
 location: PROXY_HTTP_HISTORY
 source: |+

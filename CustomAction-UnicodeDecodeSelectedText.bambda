@@ -1,5 +1,5 @@
 id: 6cb44a25-e237-4bd5-ae6a-9e414dba626f
-name: Unicode-decodeSelectedText
+name: Unicode Decode Selected Text
 function: CUSTOM_ACTION
 location: REPEATER
 source: |+

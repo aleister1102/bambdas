@@ -1,0 +1,56 @@
+id: b089c2e1-45f8-4b7b-9c6d-123456789007
+name: Parameter Collector
+function: CUSTOM_ACTION
+location: REPEATER
+source: |+
+    // Caption: Parameter Collector
+    // Description: Extracts all parameter names from URL, query, and body of request and response.
+
+    // Collect parameters from query string (?a=1&b=2)
+    String url = requestResponse.request().url();
+    var params = new java.util.HashSet<String>();
+
+    int qPos = url.indexOf('?');
+    if (qPos != -1 && qPos < url.length() - 1) {
+        String query = url.substring(qPos + 1);
+        for (String pair : query.split("&")) {
+            int eq = pair.indexOf('=');
+            if (eq > 0) params.add(pair.substring(0, eq));
+            else if (!pair.isEmpty()) params.add(pair);
+        }
+    }
+
+    // Collect parameters from body (form-encoded)
+    String body = requestResponse.request().bodyToString();
+    if (body.contains("=") && body.contains("&")) {
+        for (String pair : body.split("&")) {
+            int eq = pair.indexOf('=');
+            if (eq > 0) params.add(pair.substring(0, eq));
+            else if (!pair.isEmpty()) params.add(pair);
+        }
+    }
+
+    // Collect keys from JSON body (shallow, not nested)
+    var jsonKey = java.util.regex.Pattern.compile("\"([^\"]+)\"\\s*:");
+    var m = jsonKey.matcher(body);
+    while (m.find()) {
+        params.add(m.group(1));
+    }
+
+    // Optionally: Collect from response body too
+    String respBody = requestResponse.response().bodyToString();
+    var m2 = jsonKey.matcher(respBody);
+    while (m2.find()) {
+        params.add(m2.group(1));
+    }
+
+    // Print result
+    if (params.isEmpty()) {
+        logging.logToOutput("No parameter names found.");
+    } else {
+        StringBuilder sb = new StringBuilder("Parameters found:\n");
+        for (String p : params) {
+            sb.append("- ").append(p).append("\n");
+        }
+        logging.logToOutput(sb.toString());
+    }

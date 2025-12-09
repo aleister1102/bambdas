@@ -1,5 +1,5 @@
 id: 0caab2c7-7e30-4fea-a490-7f29024d3e77
-name: DetectCORS
+name: Detect CORS
 function: CUSTOM_COLUMN
 location: PROXY_HTTP_HISTORY
 source: |+

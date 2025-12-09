@@ -1,5 +1,5 @@
 id: 51459473-c60b-48d0-8e16-a51f52e03431
-name: DetectServerNames
+name: Detect Server Names
 function: VIEW_FILTER
 location: PROXY_HTTP_HISTORY
 source: |+

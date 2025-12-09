@@ -1,5 +1,5 @@
 id: 9db64652-a8bc-4932-86cb-112aabfb46f8
-name: Detect101SwitchingProtocols
+name: Detect 101 Switching Protocols
 function: VIEW_FILTER
 location: PROXY_HTTP_HISTORY
 source: |+

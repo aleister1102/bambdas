@@ -1,0 +1,42 @@
+id: b089c2e1-45f8-4b7b-9c6d-123456789008
+name: JWT Decoder
+function: CUSTOM_ACTION
+location: REPEATER
+source: |+
+    // Caption: JWT Decoder
+    // Description: Decodes JWTs from selection or Authorization header and prints header & payload as JSON
+
+    String jwt = null;
+    if (selection.hasRequestSelection()) {
+        jwt = selection.requestSelection().contents().toString();
+    } else {
+        // Search for Bearer JWT in Authorization header
+        var headers = requestResponse.request().headers();
+        for (var h : headers) {
+            String name = h.name().toLowerCase();
+            if (name.equals("authorization")) {
+                String value = h.value();
+                if (value.toLowerCase().startsWith("bearer ")) {
+                    jwt = value.substring("bearer ".length());
+                    break;
+                }
+            }
+        }
+    }
+
+    if (jwt == null || jwt.isEmpty() || jwt.split("\\.").length != 3) {
+        logging.logToOutput("No valid JWT found in selection or Authorization header.");
+        return;
+    }
+
+    try {
+        String[] parts = jwt.split("\\.");
+        // Base64url-decode header and payload
+        String headerJson = new String(java.util.Base64.getUrlDecoder().decode(parts[0]));
+        String payloadJson = new String(java.util.Base64.getUrlDecoder().decode(parts[1]));
+
+        logging.logToOutput("--- JWT Header ---\n" + headerJson +
+                            "\n--- JWT Payload ---\n" + payloadJson);
+    } catch (Exception e) {
+        logging.logToError("Failed to decode JWT: " + e);
+    }

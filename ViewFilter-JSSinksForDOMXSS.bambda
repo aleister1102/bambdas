@@ -1,0 +1,33 @@
+id: 8527a4d5-5120-4131-b472-870371457492
+name: JS Sinks For DOM-XSS (Passive)
+function: VIEW_FILTER
+location: PROXY_HTTP_HISTORY
+source: |+
+  /**
+   * Bambda to detect JavaScript sinks that could lead to DOM-XSS.
+   * Based on the BCheck "JS sinks for DOM-XSS (passive)".
+   */
+  
+  // Ensure there is a response
+  if (!requestResponse.hasResponse()) {
+      return false;
+  }
+  
+  String responseBody = requestResponse.response().bodyToString();
+  
+  // Regex pattern from the original BCheck
+  // "document.write|document.writeln|document.domain|\.innerHTML|\.outerHTML|\.insertAdjacentHTML|\.onevent"
+  // Note: .onevent is not a standard property, but kept from the original BCheck logic.
+  // In Java regex, we need to escape backslashes.
+  
+  java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("document\\.write|document\\.writeln|document\\.domain|\\.innerHTML|\\.outerHTML|\\.insertAdjacentHTML|\\.onevent");
+  java.util.regex.Matcher matcher = pattern.matcher(responseBody);
+  
+  if (matcher.find()) {
+      // Optional: Add highlight or notes if you want to use this as more than just a filter
+      // requestResponse.annotations().setHighlightColor(HighlightColor.RED);
+      // requestResponse.annotations().setNotes("JS Sink detected: " + matcher.group());
+      return true;
+  }
+  
+  return false;

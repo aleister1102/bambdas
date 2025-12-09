@@ -1,5 +1,5 @@
 id: 0e6d57ad-9f48-49dc-8449-3e1c2064dd9a
-name: HostnameInResponse
+name: Hostname In Response
 function: VIEW_FILTER
 location: PROXY_HTTP_HISTORY
 source: |+

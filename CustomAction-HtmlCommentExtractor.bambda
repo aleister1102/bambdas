@@ -1,0 +1,28 @@
+id: b089c2e1-45f8-4b7b-9c6d-123456789009
+name: HTML Comment Extractor
+function: CUSTOM_ACTION
+location: REPEATER
+source: |+
+    // Caption: HTML Comment Extractor
+    // Description: Searches the response body for HTML comments (<!-- ... -->) and prints their contents.
+
+    String respBody = requestResponse.response().bodyToString();
+    var commentPattern = java.util.regex.Pattern.compile("<!--(.*?)-->", java.util.regex.Pattern.DOTALL);
+    var matcher = commentPattern.matcher(respBody);
+
+    boolean foundAny = false;
+    int count = 0;
+    StringBuilder sb = new StringBuilder("HTML comments found:\n");
+
+    while (matcher.find()) {
+        foundAny = true;
+        count++;
+        sb.append("--- Comment #").append(count).append(" ---\n");
+        sb.append(matcher.group(1).trim()).append("\n\n");
+    }
+
+    if (!foundAny) {
+        logging.logToOutput("No HTML comments found in the response body.");
+    } else {
+        logging.logToOutput(sb.toString());
+    }

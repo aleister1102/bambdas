@@ -1,5 +1,5 @@
 id: e7f97f70-da57-46f3-ab51-22a8242f589e
-name: Retry until success
+name: Retry Until Success
 function: CUSTOM_ACTION
 location: REPEATER
 source: |+

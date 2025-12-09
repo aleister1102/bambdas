@@ -1,5 +1,5 @@
 id: 30958487-10a3-4e01-a2d4-02108531fa31
-name: find-potential-redirects-302-based
+name: Find Potential Redirects (302 Based)
 function: VIEW_FILTER
 location: PROXY_HTTP_HISTORY
 source: |+

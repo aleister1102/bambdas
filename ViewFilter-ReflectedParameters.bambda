@@ -1,5 +1,5 @@
 id: a08aa704-5085-408c-b08f-9e5e41d13d74
-name: ReflectedParameters
+name: Reflected Parameters
 function: VIEW_FILTER
 location: PROXY_HTTP_HISTORY
 source: |+
