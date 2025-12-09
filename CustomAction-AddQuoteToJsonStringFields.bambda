@@ -55,6 +55,7 @@ source: |+
   
   // Decode the JSON using Burp's URL utilities
   String decodedJson = utilities().urlUtils().decode(encodedJson);
+  boolean hasHackvertor = decodedJson.contains("<@") && decodedJson.contains("@>");
   
   logging().logToOutput("Original JSON: " + decodedJson);
   logging().logToOutput("-------------------------------------------");
@@ -197,8 +198,14 @@ source: |+
       // Create modified JSON with quote added to this field
       String modifiedJson = decodedJson.substring(0, positions[1]) + "'" + decodedJson.substring(positions[1]);
       
-      // URL encode the modified JSON
-      String encodedModifiedJson = utilities().urlUtils().encode(modifiedJson);
+      // URL encode the modified JSON (preserve hackvertor tags if present)
+      String encodedModifiedJson;
+      if (hasHackvertor) {
+          // Leave tags un-encoded so Hackvertor can process them at send time
+          encodedModifiedJson = modifiedJson;
+      } else {
+          encodedModifiedJson = utilities().urlUtils().encode(modifiedJson);
+      }
       
       // Rebuild the query string with modified JSON
       StringBuilder newQueryString = new StringBuilder();
@@ -226,6 +233,9 @@ source: |+
       logging().logToOutput("    Original value : \"" + originalValue + "\"");
       logging().logToOutput("    Injected value : \"" + injectedValue + "\"");
       logging().logToOutput("    New path       : " + newPath);
+      if (hasHackvertor) {
+          logging().logToOutput("    Hackvertor     : detected; tags left unencoded");
+      }
       
       try {
           var response = api().http().sendRequest(modifiedRequest, httpVersion);
