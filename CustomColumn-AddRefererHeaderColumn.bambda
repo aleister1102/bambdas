@@ -1,0 +1,12 @@
+id: 8c394553-da17-457a-8a6f-d7926e56c101
+name: AddRefererHeaderColumn
+function: CUSTOM_COLUMN
+location: PROXY_HTTP_HISTORY
+source: |+
+  /**
+  * Add Referer header column.
+  *
+  * @author PortSwigger
+  **/
+  return requestResponse.request().headerValue("Referer");
+  
