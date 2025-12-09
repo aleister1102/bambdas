@@ -12,14 +12,6 @@ source: |+
    * @author quan.m.le
    **/
   
-  import java.net.URLDecoder;
-  import java.net.URLEncoder;
-  import java.nio.charset.StandardCharsets;
-  import java.util.regex.Pattern;
-  import java.util.regex.Matcher;
-  import java.util.ArrayList;
-  import java.util.List;
-  
   var request = requestResponse.request();
   var httpVersion = request.httpVersion().equals("HTTP/2") ? HttpMode.HTTP_2 : HttpMode.HTTP_1;
   
@@ -35,7 +27,7 @@ source: |+
   String pathWithoutQuery = fullPath.substring(0, queryStart);
   String queryString = fullPath.substring(queryStart + 1);
   
-  // Find URL-encoded JSON in query parameters (looking for 'data=' or any param with JSON)
+  // Find URL-encoded JSON in query parameters
   String[] params = queryString.split("&");
   String targetParamName = null;
   String encodedJson = null;
@@ -61,53 +53,101 @@ source: |+
       return;
   }
   
-  // Decode the JSON
-  String decodedJson;
-  try {
-      decodedJson = URLDecoder.decode(encodedJson, StandardCharsets.UTF_8.toString());
-  } catch (Exception e) {
-      logging().logToOutput("Failed to URL decode: " + e.getMessage());
-      return;
-  }
+  // Decode the JSON using Burp's URL utilities
+  String decodedJson = utilities().urlUtils().decode(encodedJson);
   
   logging().logToOutput("Original JSON: " + decodedJson);
   logging().logToOutput("-------------------------------------------");
   
-  // Find all string values in JSON using regex
-  // Pattern matches "key":"value" where value is a string
-  Pattern stringPattern = Pattern.compile("\"([^\"]+)\"\\s*:\\s*\"([^\"]*)\"");
-  Matcher matcher = stringPattern.matcher(decodedJson);
+  // Find all string values in JSON by looking for ":"value" patterns
+  // We'll track positions where we find string values
+  var stringPositions = new java.util.ArrayList<int[]>();
+  var fieldNames = new java.util.ArrayList<String>();
   
-  List<int[]> stringPositions = new ArrayList<>();
-  List<String> fieldNames = new ArrayList<>();
-  
-  while (matcher.find()) {
-      // Store the start and end positions of the value (group 2)
-      int valueStart = matcher.start(2);
-      int valueEnd = matcher.end(2);
-      stringPositions.add(new int[]{valueStart, valueEnd});
-      fieldNames.add(matcher.group(1));
+  // Simple parser to find "key":"value" patterns
+  int pos = 0;
+  while (pos < decodedJson.length()) {
+      // Find next colon followed by quote (indicating string value)
+      int colonQuote = decodedJson.indexOf(":\"", pos);
+      if (colonQuote == -1) break;
+      
+      // Find the key name (look backwards for the opening quote of the key)
+      int keyEnd = colonQuote;
+      int keyStart = decodedJson.lastIndexOf("\"", keyEnd - 1);
+      if (keyStart == -1) {
+          pos = colonQuote + 2;
+          continue;
+      }
+      String keyName = decodedJson.substring(keyStart + 1, keyEnd);
+      
+      // Find the value (starts after :")
+      int valueStart = colonQuote + 2;
+      int valueEnd = valueStart;
+      
+      // Find closing quote (handle escaped quotes)
+      while (valueEnd < decodedJson.length()) {
+          int nextQuote = decodedJson.indexOf("\"", valueEnd);
+          if (nextQuote == -1) break;
+          // Check if escaped
+          if (nextQuote > 0 && decodedJson.charAt(nextQuote - 1) == '\\') {
+              valueEnd = nextQuote + 1;
+              continue;
+          }
+          valueEnd = nextQuote;
+          break;
+      }
+      
+      if (valueEnd > valueStart) {
+          stringPositions.add(new int[]{valueStart, valueEnd});
+          fieldNames.add(keyName);
+      }
+      
+      pos = valueEnd + 1;
   }
   
-  // Also find string values in arrays like ["value1", "value2"]
-  Pattern arrayStringPattern = Pattern.compile("\\[([^\\]]*\"[^\\]]+)\\]");
-  Matcher arrayMatcher = arrayStringPattern.matcher(decodedJson);
-  
-  while (arrayMatcher.find()) {
-      String arrayContent = arrayMatcher.group(1);
-      int arrayStart = arrayMatcher.start(1);
+  // Also find strings in arrays like ["value1","value2"]
+  pos = 0;
+  while (pos < decodedJson.length()) {
+      int bracketStart = decodedJson.indexOf("[\"", pos);
+      if (bracketStart == -1) {
+          // Also check for comma-separated strings in arrays
+          int commaQuote = decodedJson.indexOf(",\"", pos);
+          if (commaQuote == -1) break;
+          
+          // Check if we're inside an array
+          int lastBracket = decodedJson.lastIndexOf("[", commaQuote);
+          int lastCloseBracket = decodedJson.lastIndexOf("]", commaQuote);
+          if (lastBracket > lastCloseBracket) {
+              int valueStart = commaQuote + 2;
+              int valueEnd = decodedJson.indexOf("\"", valueStart);
+              if (valueEnd > valueStart) {
+                  // Check if not already tracked
+                  boolean isDuplicate = false;
+                  for (int i = 0; i < stringPositions.size(); i++) {
+                      int[] existingPos = stringPositions.get(i);
+                      if (existingPos[0] == valueStart) {
+                          isDuplicate = true;
+                          break;
+                      }
+                  }
+                  if (!isDuplicate) {
+                      stringPositions.add(new int[]{valueStart, valueEnd});
+                      fieldNames.add("array_item");
+                  }
+              }
+          }
+          pos = commaQuote + 2;
+          continue;
+      }
       
-      // Find each string in the array
-      Pattern innerStringPattern = Pattern.compile("\"([^\"]*)\"");
-      Matcher innerMatcher = innerStringPattern.matcher(arrayContent);
-      
-      while (innerMatcher.find()) {
-          int valueStart = arrayStart + innerMatcher.start(1);
-          int valueEnd = arrayStart + innerMatcher.end(1);
-          // Check if this position is not already tracked (avoid duplicates)
+      int valueStart = bracketStart + 2;
+      int valueEnd = decodedJson.indexOf("\"", valueStart);
+      if (valueEnd > valueStart) {
+          // Check if not already tracked
           boolean isDuplicate = false;
-          for (int[] pos : stringPositions) {
-              if (pos[0] == valueStart) {
+          for (int i = 0; i < stringPositions.size(); i++) {
+              int[] existingPos = stringPositions.get(i);
+              if (existingPos[0] == valueStart) {
                   isDuplicate = true;
                   break;
               }
@@ -117,6 +157,7 @@ source: |+
               fieldNames.add("array_item");
           }
       }
+      pos = bracketStart + 2;
   }
   
   logging().logToOutput("Found " + stringPositions.size() + " string fields to test");
@@ -126,25 +167,14 @@ source: |+
   
   // Iterate through each string field and add a quote
   for (int i = 0; i < stringPositions.size(); i++) {
-      int[] pos = stringPositions.get(i);
+      int[] positions = stringPositions.get(i);
       String fieldName = fieldNames.get(i);
       
       // Create modified JSON with quote added to this field
-      StringBuilder modifiedJson = new StringBuilder();
-      modifiedJson.append(decodedJson.substring(0, pos[1]));
-      modifiedJson.append("'"); // Add single quote at end of string value
-      modifiedJson.append(decodedJson.substring(pos[1]));
-      
-      String modifiedJsonStr = modifiedJson.toString();
+      String modifiedJson = decodedJson.substring(0, positions[1]) + "'" + decodedJson.substring(positions[1]);
       
       // URL encode the modified JSON
-      String encodedModifiedJson;
-      try {
-          encodedModifiedJson = URLEncoder.encode(modifiedJsonStr, StandardCharsets.UTF_8.toString());
-      } catch (Exception e) {
-          logging().logToOutput("Failed to URL encode: " + e.getMessage());
-          continue;
-      }
+      String encodedModifiedJson = utilities().urlUtils().encode(modifiedJson);
       
       // Rebuild the query string with modified JSON
       StringBuilder newQueryString = new StringBuilder();
@@ -166,7 +196,6 @@ source: |+
       // Send the request
       requestCount++;
       logging().logToOutput("[" + requestCount + "] Testing field: " + fieldName);
-      logging().logToOutput("    Value with quote added at position " + pos[1]);
       
       try {
           var response = api().http().sendRequest(modifiedRequest, httpVersion);
@@ -175,17 +204,14 @@ source: |+
           
           logging().logToOutput("    Status: " + statusCode + " | Length: " + responseLength);
           
-          // If we get an interesting response (error), show it in the response pane
-          if (statusCode >= 400 || statusCode == 200) {
-              // Check for SQL error indicators in response
-              String responseBody = response.response().bodyToString();
-              if (responseBody.contains("SQL") || responseBody.contains("syntax") || 
-                  responseBody.contains("error") || responseBody.contains("exception") ||
-                  responseBody.contains("ORA-") || responseBody.contains("mysql") ||
-                  responseBody.contains("postgresql") || responseBody.contains("sqlite")) {
-                  logging().logToOutput("    *** POTENTIAL SQL ERROR DETECTED ***");
-                  httpEditor.responsePane().set(response.response().toByteArray());
-              }
+          // Check for SQL error indicators in response
+          String responseBody = response.response().bodyToString();
+          if (responseBody.contains("SQL") || responseBody.contains("syntax") || 
+              responseBody.contains("error") || responseBody.contains("exception") ||
+              responseBody.contains("ORA-") || responseBody.contains("mysql") ||
+              responseBody.contains("postgresql") || responseBody.contains("sqlite")) {
+              logging().logToOutput("    *** POTENTIAL SQL ERROR DETECTED ***");
+              httpEditor.responsePane().set(response.response().toByteArray());
           }
       } catch (Exception e) {
           logging().logToOutput("    Error: " + e.getMessage());
@@ -196,4 +222,3 @@ source: |+
   
   logging().logToOutput("-------------------------------------------");
   logging().logToOutput("Completed testing " + requestCount + " string fields");
-
