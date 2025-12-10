@@ -64,6 +64,7 @@ source: |+
   var stringPositions = new java.util.ArrayList();
   var fieldNames = new java.util.ArrayList();
   var fieldValues = new java.util.ArrayList();
+  var insertionPayloads = new java.util.ArrayList();
 
   // Regex parser to find "key":"value" patterns (string values)
   java.util.regex.Pattern p = java.util.regex.Pattern.compile("\"([^\"]+)\"\\s*:\\s*\"([^\"]*)\"");
@@ -76,6 +77,27 @@ source: |+
       stringPositions.add(new int[]{valueStart, valueEnd});
       fieldNames.add(keyName);
       fieldValues.add(fieldValue);
+      insertionPayloads.add("'");
+  }
+
+  // Regex parser to find empty arrays "key":[] or "key": []
+  // We want to inject into these by adding a string element
+  java.util.regex.Pattern pArray = java.util.regex.Pattern.compile("\"([^\"]+)\"\\s*:\\s*(\\[\\s*\\])");
+  java.util.regex.Matcher mArray = pArray.matcher(decodedJson);
+  while (mArray.find()) {
+      // Group 1 is key name
+      // Group 2 is []
+      String keyName = mArray.group(1);
+      int arrayEnd = mArray.end(2);
+      // We insert before the closing bracket ']'
+      // arrayEnd points after ']', so arrayEnd - 1 is index of ']'
+      int insertionPoint = arrayEnd - 1;
+      
+      stringPositions.add(new int[]{mArray.start(2), insertionPoint});
+      fieldNames.add(keyName + " (empty array)");
+      fieldValues.add("[]");
+      // Insert "bambda'" inside the array
+      insertionPayloads.add("\"bambda'\"");
   }
   
   // Also find strings in arrays like ["value1","value2"]
@@ -108,6 +130,7 @@ source: |+
                       stringPositions.add(new int[]{valueStart, valueEnd});
                       fieldNames.add("array_item");
                       fieldValues.add(arrayValue);
+                      insertionPayloads.add("'");
                   }
               }
           }
@@ -132,6 +155,7 @@ source: |+
               stringPositions.add(new int[]{valueStart, valueEnd});
               fieldNames.add("array_item");
               fieldValues.add(arrayValue);
+              insertionPayloads.add("'");
           }
       }
       pos = bracketStart + 2;
@@ -162,10 +186,11 @@ source: |+
       int[] positions = (int[]) stringPositions.get(i);
       String fieldName = (String) fieldNames.get(i);
       String originalValue = (String) fieldValues.get(i);
-      String injectedValue = originalValue + "'";
+      String payload = (String) insertionPayloads.get(i);
+      String injectedValue = originalValue + payload;
       
       // Create modified JSON with quote added to this field
-      String modifiedJson = decodedJson.substring(0, positions[1]) + "'" + decodedJson.substring(positions[1]);
+      String modifiedJson = decodedJson.substring(0, positions[1]) + payload + decodedJson.substring(positions[1]);
       
       // URL encode the modified JSON
       String encodedModifiedJson = utilities().urlUtils().encode(modifiedJson);
