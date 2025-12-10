@@ -1,9 +1,9 @@
 metadata:
   language: v1-beta
-  name: "Ruby On Rails Storage"
+  name: "Ruby on Rails Storage File Disclosure"
   description: "Checks for Ruby on Rails storage.yml file disclosure."
   author: "@puzzlepeaches"
-  tags: "ruby", "storage", "exposure", "rails"
+  tags: "passive", "ruby", "rails", "exposure", "config"
 
 run for each:
   potential_path = 

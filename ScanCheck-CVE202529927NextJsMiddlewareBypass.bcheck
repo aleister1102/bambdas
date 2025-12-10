@@ -1,9 +1,9 @@
 metadata:
     language: v2-beta
-    name: "C V E202529927 Next Js Middleware Bypass"
-    description: "Next.js Detected, possible vulnerability"
+    name: "CVE-2025-29927 - Next.js Middleware Bypass"
+    description: "Detects Next.js applications potentially vulnerable to middleware bypass (CVE-2025-29927)."
     author: "Paul Schmelzel"
-    tags: "CVE-2025-29927","Next.js","Nextjs","Bypass"
+    tags: "active", "cve", "nextjs", "bypass", "middleware"
 
 given request then
     send request:

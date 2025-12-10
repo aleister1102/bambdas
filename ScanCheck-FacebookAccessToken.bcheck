@@ -1,9 +1,9 @@
 metadata:
-  language: v1-beta
-  name: "Facebook Access Token"
-  description: "Looks for Facebook access tokens in page source."
-  author: "@puzzlepeaches"
-  tags: "facebook", "token", "exposure"
+    language: v1-beta
+    name: "Facebook Access Token"
+    description: "Detects Facebook access tokens in HTTP responses."
+    author: "@puzzlepeaches"
+    tags: "passive", "facebook", "token", "exposure"
 
 given response then
   if {latest.response} matches "\b(EAACEdEose0cBA[a-zA-Z0-9]+)\b" then

@@ -1,9 +1,9 @@
 metadata:
     language: v1-beta
-    name: "Spring4shell"
-    description: "Checks for the Spring4Shell vulnerability"
+    name: "CVE-2022-22965 - Spring4Shell RCE"
+    description: "Checks for the Spring4Shell vulnerability (CVE-2022-22965)"
     author: "Giriraj R (cipherlover)"
-    tags: "Srping4Shell", "CVE-2022-22965", "cve"
+    tags: "active", "spring", "rce", "cve", "CVE-2022-22965"
 
 define:
     spring4shell_payload = `class.module.classLoader.URLs%5B0%5D=0`

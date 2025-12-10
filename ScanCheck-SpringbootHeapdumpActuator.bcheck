@@ -1,9 +1,9 @@
 metadata:
     language: v1-beta
-    name: "Springboot Heapdump Actuator"
-    description: "Springboot heapdump actuator provides a heap dump from the application's JVM"
+    name: "Spring Boot Heapdump Actuator Exposure"
+    description: "Spring Boot heapdump actuator provides a heap dump from the application's JVM"
     author: "psytester"
-	tags: "actuator", "springboot", "exposure", "informative"
+    tags: "active", "actuator", "spring-boot", "exposure", "sensitive-data"
 
 run for each:
     potential_path =

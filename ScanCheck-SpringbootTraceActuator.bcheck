@@ -1,9 +1,9 @@
 metadata:
-	language: v1-beta
-	name: "Springboot Trace Actuator"
-	description: "Springboot trace actuator displays trace information (by default the last few HTTP requests)."
-	author: "Mateusz Dabrowski (dbrwsky)"
-	tags: "actuator", "springboot", "exposure", "informative"
+    language: v1-beta
+    name: "Spring Boot Trace Actuator Exposure"
+    description: "Spring Boot trace actuator displays trace information (by default the last few HTTP requests)."
+    author: "Mateusz Dabrowski (dbrwsky)"
+    tags: "active", "actuator", "spring-boot", "exposure", "sensitive-data"
 
 run for each:
     potential_path =

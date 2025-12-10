@@ -1,10 +1,10 @@
 #Verified: Yes
 metadata:
     language: v1-beta
-    name: "Waf Bypass"
+    name: "WAF Bypass Detection"
     description: "Use different payloads to try to bypass the WAF or get an idea of how it can be bypassed"
     author: "Brumens"
-    tags: "waf", "firewall", "bypass"
+    tags: "active", "waf", "firewall", "bypass", "xss"
 
 define:
     param = "dummyparam"

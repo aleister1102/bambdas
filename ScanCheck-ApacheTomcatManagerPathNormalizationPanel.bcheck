@@ -1,9 +1,9 @@
 metadata:
-	language: v1-beta
-	name: "Apache Tomcat Manager Path Normalization Panel"
-	author: "Parimal Shaw"
-	description: "Apache Tomcat Manager Path Normalization login panel was discovered via path normalization. Normalizing a path involves modifying the string that identifies a path or file so that it confirms to a valid path on the target operating system."
-	tags: "Apache Tomcat Misconfiguration"
+    language: v1-beta
+    name: "Apache Tomcat Manager Path Normalization"
+    description: "Detects Apache Tomcat Manager login panel accessible via path normalization techniques."
+    author: "Parimal Shaw"
+    tags: "active", "apache", "tomcat", "path-normalization", "bypass"
 
 run for each:
     potential_path = 

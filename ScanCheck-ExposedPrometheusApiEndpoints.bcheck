@@ -1,8 +1,9 @@
 metadata:
     language: v1-beta
-    name: "Exposed Prometheus Api Endpoints"
-    description: "Check for exposed Prometheus Config, Flags and Targets API endpoints."
+    name: "Exposed Prometheus API Endpoints"
+    description: "Checks for exposed Prometheus Config, Flags, and Targets API endpoints."
     author: "@nightshiba"
+    tags: "active", "prometheus", "api", "exposure", "config"
 
 run for each:
     # Prometheus API endpoints: https://prometheus.io/docs/prometheus/latest/querying/api/ and https://jfrog.com/blog/dont-let-prometheus-steal-your-fire/

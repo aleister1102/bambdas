@@ -1,9 +1,10 @@
 metadata:
     language: v2-beta
     name: "Web Content Discovery"
-    description: "Checks for the presence of files"
-#https://github.com/danielmiessler/SecLists/blob/master/Discovery/Web-Content/quickhits.txt - payload list
+    description: "Checks for the presence of common sensitive files and directories"
     author: "Kaustubh"
+    tags: "active", "discovery", "exposure", "files", "directories"
+#https://github.com/danielmiessler/SecLists/blob/master/Discovery/Web-Content/quickhits.txt - payload list
 
 run for each:
     potential_path = 

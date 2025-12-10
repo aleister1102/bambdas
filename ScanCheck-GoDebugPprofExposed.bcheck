@@ -1,9 +1,9 @@
 metadata:
     language: v1-beta
     name: "Go Debug Pprof Exposed"
-    description: "go /debug/pprof is exposed this endpoint can leak sensitive information"
+    description: "Detects exposed Go /debug/pprof endpoint which can leak sensitive profiling information."
     author: "Mateusz Dabrowski (dbrwsky)"
-    tags: "go", "debug", "exposure"
+    tags: "active", "go", "debug", "pprof", "exposure"
 
 run for each:
     potential_path = "/debug/pprof"

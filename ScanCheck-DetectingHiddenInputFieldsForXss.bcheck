@@ -1,9 +1,9 @@
 metadata:
     language: v2-beta
-    name: "Detecting Hidden Input Fields For Xss"
+    name: "Hidden Input Fields for XSS"
+    description: "Identifies hidden input fields in HTTP responses that may be susceptible to XSS injection."
     author: "mrrootsec, Kyle Gilligan"
-    description: "This Bcheck identifies hidden input fields in the HTTP response for further examination."
-    tags: "passive", "xss", "html", "hidden"
+    tags: "passive", "xss", "html", "hidden-input"
 
 define:
     issueDetail_FULL = 

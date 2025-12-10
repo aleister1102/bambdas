@@ -1,9 +1,9 @@
 metadata:
     language: v2-beta
-    name: "Pathsuffix Waf Proxy"
-    description: "Accessing paths blocked by proxies or WAFs by adding special suffixes."
+    name: "Path Suffix WAF/Proxy Bypass"
+    description: "Tests for bypassing WAF or proxy restrictions by adding special path suffixes."
     author: "Soroush Dalili @irsdl"
-    tags: "bypass", "path", "waf", "proxy", "access"
+    tags: "active", "bypass", "waf", "proxy", "path"
 
 # Important Notes:
 # For some of these two work such as \xA0 on Nginx, HTTP/1 needs to be used.

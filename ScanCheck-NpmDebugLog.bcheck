@@ -1,9 +1,9 @@
 metadata:
-  language: v1-beta
-  name: "Npm Debug Log"
-  description: "Checks for NPM debug log files in current path as opposed to just root directory of site."
-  author: "@puzzlepeaches"
-  tags: "npm", "log", "exposure", "error"
+    language: v1-beta
+    name: "NPM Debug Log"
+    description: "Detects exposed npm-debug.log files that may contain sensitive information."
+    author: "@puzzlepeaches"
+    tags: "active", "npm", "log", "exposure"
 
 run for each:
   potential_path = 

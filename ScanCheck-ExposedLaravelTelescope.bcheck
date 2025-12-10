@@ -1,9 +1,9 @@
 metadata:
     language: v1-beta
     name: "Exposed Laravel Telescope"
-    description: "A Laravel Telescope was discovered, which exposed log files, requests and some information containing app secrets."
+    description: "Detects exposed Laravel Telescope debug assistant which may reveal log files, requests, and application secrets."
     author: "Yasin Yilmaz"
-    tags: "laravel", "telescope", "php"
+    tags: "active", "laravel", "telescope", "php", "debug", "exposure"
 
 run for each:
     potential_path =

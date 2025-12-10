@@ -1,9 +1,9 @@
 metadata:
-  language: v1-beta
-  name: "Github Personal Access"
-  description: "Looks for GitHub personal access token in page source."
-  author: "@puzzlepeaches"
-  tags: "github", "token", "exposure" 
+    language: v1-beta
+    name: "GitHub Personal Access Token"
+    description: "Detects GitHub personal access tokens in HTTP responses."
+    author: "@puzzlepeaches"
+    tags: "passive", "github", "token", "exposure" 
 
 given response then
   if {latest.response} matches "\b(ghp_[a-zA-Z0-9]{36})\b" then

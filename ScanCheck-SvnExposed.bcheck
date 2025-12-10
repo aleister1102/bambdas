@@ -1,9 +1,9 @@
 metadata:
     language: v2-beta
-    name: "Svn Exposed"
-    description: "Tests for exposed svn config in current path and at the root directory of site"
+    name: "SVN Configuration Exposure"
+    description: "Tests for exposed SVN config in current path and at the root directory of site"
     author: "j3ssie"
-    tags: "exposure", "svn", "config", "file"
+    tags: "active", "exposure", "svn", "config", "source-code"
 
 run for each:
     potential_path = ".svn/entries", ".svn/text", ".svn/all-wcprops"

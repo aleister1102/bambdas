@@ -1,9 +1,9 @@
 metadata:
     language: v2-beta
-    name: "JS Sinks For DOM-XSS (Passive)"
-    description: "JavaScript sink that could lead to DOM-XSS."
+    name: "JavaScript Sinks for DOM-XSS"
+    description: "Detects JavaScript sinks that could lead to DOM-based XSS vulnerabilities."
     author: "Lisandre.com"
-    tags: "passive"
+    tags: "passive", "xss", "dom-xss", "javascript"
 
 given response then
     #https://portswigger.net/web-security/cross-site-scripting/dom-based#exploiting-dom-xss-with-different-sources-and-sinks

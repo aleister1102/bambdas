@@ -1,9 +1,9 @@
 metadata:
-  language: v1-beta
-  name: "Npm Access Token"
-  description: "A detector for NPM access token exposure in page source."
-  author: "@puzzlepeaches"
-  tags: "npm", "token", "exposure" 
+    language: v1-beta
+    name: "NPM Access Token"
+    description: "Detects NPM access tokens in HTTP responses."
+    author: "@puzzlepeaches"
+    tags: "passive", "npm", "token", "exposure" 
 
 given response then
   if {latest.response} matches "npm_[A-Za-z0-9]{36}" then

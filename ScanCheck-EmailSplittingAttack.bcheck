@@ -4,9 +4,9 @@
 metadata:
     language: v2-beta
     name: "Email Splitting Attack"
-    description: "Tries to trick the server to sending an email to a collaborator address, instead of the actual target, by confusing email address validation logic"
+    description: "Tests for email splitting vulnerabilities by confusing email address validation logic."
     author: "Peter Wiener"
-    tags: "active", "email"
+    tags: "active", "email", "injection", "validation-bypass"
 
 define:
     # construct the collaborator email address, which we will try and trick

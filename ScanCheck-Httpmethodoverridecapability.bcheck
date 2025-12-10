@@ -1,9 +1,9 @@
 metadata:
-  language: v2-beta
-  name: "Httpmethodoverridecapability"
-  description: "Check for the support for a request parameter or a request header allowing to override the HTTP method."
-  author: "Dominique Righetto"
-  tags: "active"
+    language: v2-beta
+    name: "HTTP Method Override Capability"
+    description: "Checks for support of request parameters or headers allowing HTTP method override."
+    author: "Dominique Righetto"
+    tags: "active", "http", "method-override", "bypass"
 
 define:
   test_method = "OPTIONS"

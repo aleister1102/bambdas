@@ -1,8 +1,9 @@
 metadata:
     language: v2-beta
-    name: "Crlfinjection"
-    description: "Checks for CRLF Injection"
+    name: "CRLF Injection"
+    description: "Checks for CRLF Injection vulnerabilities by injecting carriage return and line feed characters."
     author: "0xGodson_"
+    tags: "active", "injection", "crlf", "header"
 
 define:
     nonce = `{random_str(13)}`

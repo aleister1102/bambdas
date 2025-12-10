@@ -1,9 +1,9 @@
 metadata:
-  language: v2-beta
-  name: "Connect Port Scan"
-  description: "Port Scanning using CONNECT request method appears to be possible. For more information, check https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Methods/CONNECT"
-  author: "Mehul Panchal @ Accenture, Fedrick Sequeira @ Accenture, Andrej Simko @ Accenture"
-  tags: "connect", "port", "scan", "port-scan"
+    language: v2-beta
+    name: "HTTP CONNECT Port Scan"
+    description: "Detects if port scanning via HTTP CONNECT method is possible, which may enable proxying to internal services."
+    author: "Mehul Panchal @ Accenture, Fedrick Sequeira @ Accenture, Andrej Simko @ Accenture"
+    tags: "active", "connect", "port-scan", "ssrf"
 
 run for each:
   new_port = "80", "443"

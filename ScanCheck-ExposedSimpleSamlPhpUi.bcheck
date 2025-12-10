@@ -1,8 +1,9 @@
 metadata:
     language: v1-beta
-    name: "Exposed Simple Saml Php Ui"
-    description: "Tests for exposed admin interface of Simple SAML php"
+    name: "Exposed SimpleSAMLphp Admin Interface"
+    description: "Detects exposed SimpleSAMLphp admin interface."
     author: "Patrick Schmid"
+    tags: "active", "saml", "php", "admin", "exposure"
 
 run for each:
     potential_path =

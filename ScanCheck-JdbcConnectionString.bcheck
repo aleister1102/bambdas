@@ -1,9 +1,9 @@
 metadata:
-  language: v1-beta
-  name: "Jdbc Connection String"
-  description: "Looks for JDBC connection strings in page source."
-  author: "@puzzlepeaches"
-  tags: "exposure", "token", "jdbc"
+    language: v1-beta
+    name: "JDBC Connection String"
+    description: "Detects JDBC connection strings in HTTP responses."
+    author: "@puzzlepeaches"
+    tags: "passive", "jdbc", "database", "exposure"
 
 given response then
   if {latest.response} matches "jdbc:[a-z:]+://[A-Za-z0-9\.\-_:;=/@?,&]+" then

@@ -1,8 +1,9 @@
 metadata:
     language: v2-beta
-    name: "Apache Airflow Config Exposure"
-    description: "Apache Airflow configuration page was detected"
+    name: "Apache Airflow Configuration Exposure"
+    description: "Detects exposed Apache Airflow configuration pages that may reveal sensitive environment settings."
     author: "Nithissh"
+    tags: "active", "apache", "airflow", "config", "exposure"
 
 run for each:
     # you could add more values to this list to make the check repeat

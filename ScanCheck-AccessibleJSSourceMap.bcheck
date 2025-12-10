@@ -1,9 +1,9 @@
 metadata:
     language: v2-beta
-    name: "Accessible JS Source Map (Extended + Relative)"
-    description: "Detects exposed source map files for JavaScript across paths and relative matches."
+    name: "Accessible JavaScript Source Map"
+    description: "Detects exposed source map files for JavaScript across paths and relative matches, which may reveal unobfuscated source code."
     author: "Kaustubh"
-    tags: "passive", "javascript", "source map", "informative"
+    tags: "active", "passive", "javascript", "source-map", "exposure"
 
 run for each:
     replacing_path =

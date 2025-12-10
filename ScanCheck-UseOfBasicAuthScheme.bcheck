@@ -1,9 +1,9 @@
 metadata:
     language: v2-beta
-    name: "Use Of Basic Auth Scheme"
+    name: "HTTP Basic Authentication Scheme Usage"
     author: "Kyle Gilligan"
     description: "This test looks for indicators of 'Authorization: Basic' within unencrypted webpages."
-    tags: "passive", "basic", "http", "authorization"
+    tags: "passive", "authentication", "http", "basic-auth", "credentials"
 
 # `Indicators of `Basic Auth`-Acceptable Webpages` Keywords #1: `login`, `log-in`, `log_in`, `signin`, `sign-in`, `sign_in`, `signup`, `sign-up`, `sign_up`.
 # `Indicators of `Basic Auth`-Acceptable Webpages` Keywords: `registration`, `register`, `access`, `auth`, `cdsso`, `forgot`, `reset`.

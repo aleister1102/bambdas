@@ -1,8 +1,9 @@
 metadata:
     language: v2-beta
-    name: "Information Disclosure In URLs"
-    description: "Checks for URLs containing potentially sensitive information"
+    name: "Information Disclosure in URLs"
+    description: "Detects URLs containing potentially sensitive information like tokens, API keys, or passwords."
     author: "Kaustubh"
+    tags: "passive", "information-disclosure", "url", "sensitive-data"
 
 given request then
     if ({base.request.url} matches "token=") or 

@@ -1,9 +1,9 @@
 metadata:
     language: v1-beta
-    name: "Springboot Conditions Actuator"
-    description: "Springboot conditions actuator exposed"
+    name: "Spring Boot Conditions Actuator Exposure"
+    description: "Spring Boot conditions actuator exposed"
     author: "Mateusz Dabrowski (dbrwsky)"
-	tags: "actuator", "springboot", "exposure", "informative"
+    tags: "active", "actuator", "spring-boot", "exposure"
 
 run for each:
     potential_path =

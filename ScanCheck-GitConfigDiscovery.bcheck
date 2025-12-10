@@ -1,9 +1,9 @@
 metadata:
     language: v1-beta
-    name: "Git Config Discovery"
-    description: "Tests for exposed git config in current path as opposed to just root directory of site."
+    name: "Git Configuration Discovery"
+    description: "Detects exposed .git/config files that may reveal repository information."
     author: "github.com/BuffaloWill"
-    tags: "exposure", "git", "config", "file"
+    tags: "active", "git", "config", "exposure"
 
 run for each:
     potential_path =

@@ -1,9 +1,9 @@
 metadata:
     language: v2-beta
-    name: "C V E202530208 Vite Dev Server"
-    description: "Detects file read or restricted directory disclosure in Vite dev servers"
+    name: "CVE-2025-30208 - Vite Dev Server File Read"
+    description: "Detects file read or restricted directory disclosure vulnerability in Vite dev servers (CVE-2025-30208)."
     author: "Fedrick Sequeira @ Accenture"
-    tags: "vite", "file-read", "directory-leak", "CVE-2025-30208"
+    tags: "active", "cve", "vite", "file-read", "lfi"
 
 define:
     fs_block_msg = "vite serving allow list"

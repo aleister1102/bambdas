@@ -1,9 +1,9 @@
 metadata:
-  language: v1-beta
-  name: "Oauth Access Key"
-  description: "Looks for Google OAuth access keys in page source."
-  author: "@puzzlepeaches"
-  tags: "exposure", "token", "google"
+    language: v1-beta
+    name: "Google OAuth Access Key"
+    description: "Detects Google OAuth access keys in HTTP responses."
+    author: "@puzzlepeaches"
+    tags: "passive", "google", "oauth", "token", "exposure"
 
 given response then
   if {latest.response} matches "ya29\.[0-9A-Za-z\-_]+" then

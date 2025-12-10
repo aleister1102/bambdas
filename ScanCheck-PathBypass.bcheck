@@ -2,10 +2,10 @@
 
 metadata:
     language: v1-beta
-    name: "Path Bypass"
-    description: "Trying out techniques to bypass a restricted path discovered in the application. Except firewall 403 respones to avoid a lot of junk traffic."
-    tags: "active", "bypass", "path", "forbidden", "403"
+    name: "403/401 Path Bypass"
+    description: "Trying out techniques to bypass a restricted path discovered in the application. Except firewall 403 responses to avoid a lot of junk traffic."
     author: "Brumens"
+    tags: "active", "bypass", "path", "forbidden", "403", "401"
 
 define:
     desc = "Possible that a bypass technique worked and that we accessed a restricted path in the application"

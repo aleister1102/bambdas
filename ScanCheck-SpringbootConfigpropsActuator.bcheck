@@ -1,9 +1,9 @@
 metadata:
     language: v1-beta
-    name: "Springboot Configprops Actuator"
-    description: "Springboot configprops actuator may expose sensitive information"
+    name: "Spring Boot Configprops Actuator Exposure"
+    description: "Spring Boot configprops actuator may expose sensitive information"
     author: "Mateusz Dabrowski (dbrwsky)"
-	tags: "actuator", "springboot", "exposure", "informative"
+    tags: "active", "actuator", "spring-boot", "exposure", "config"
 
 run for each:
     potential_path =

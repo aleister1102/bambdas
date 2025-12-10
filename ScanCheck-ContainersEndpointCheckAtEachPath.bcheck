@@ -1,9 +1,9 @@
 metadata:
     language: v2-beta
-    name: "Containers Endpoint Check At Each Path"
-    description: "Containers endpoints that have been exposed"
+    name: "Container Endpoints Exposure"
+    description: "Detects exposed container endpoints including Docker, Kubernetes, and cloud metadata services."
     author: "Kaustubh"
-    tags: "Path", "Container Exposed"
+    tags: "active", "docker", "kubernetes", "container", "exposure"
 
 # Path-level check
 run for each:

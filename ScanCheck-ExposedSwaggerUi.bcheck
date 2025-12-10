@@ -1,9 +1,9 @@
 metadata:
-  language: v1-beta
-  name: "Exposed Swagger Ui"
-  description: "Tests for an exposed SwaggerUI endpoint"
-  author: "254 Labs, Org."
-  tags: "open-api", "swagger", "swagger-ui", "exposure", "informative"
+    language: v1-beta
+    name: "Exposed Swagger UI"
+    description: "Detects exposed Swagger UI and OpenAPI documentation endpoints."
+    author: "254 Labs, Org."
+    tags: "active", "swagger", "openapi", "api", "exposure"
 
 run for each:
   potential_path = 

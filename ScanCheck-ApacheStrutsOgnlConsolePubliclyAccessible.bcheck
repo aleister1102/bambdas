@@ -1,8 +1,9 @@
 metadata:
     language: v1-beta
-    name: "Apache Struts Ognl Console Publicly Accessible"
-    description: "Apache Struts OGNL Console is public and could be exploited to gain access"
+    name: "Apache Struts OGNL Console Publicly Accessible"
+    description: "Detects publicly accessible Apache Struts OGNL Console which could be exploited to gain unauthorized access."
     author: "Sourav Kalal"
+    tags: "active", "apache", "struts", "ognl", "exposure"
 
 define:
     potential_path = "/struts/webconsole.html?debug=console"

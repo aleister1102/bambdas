@@ -1,9 +1,9 @@
 metadata:
-  language: v1-beta
-  name: "Openai Api Key"
-  description: "Looks for OpenAI API key exposure."
-  author: "@puzzlepeaches"
-  tags: "openai", "token", "exposure"
+    language: v1-beta
+    name: "OpenAI API Key"
+    description: "Detects OpenAI API keys in HTTP responses."
+    author: "@puzzlepeaches"
+    tags: "passive", "openai", "api-key", "exposure"
 
 given response then
   if {latest.response} matches "sk-[a-zA-Z0-9]{48}" then

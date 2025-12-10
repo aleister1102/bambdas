@@ -1,9 +1,9 @@
 metadata:
     language: v2-beta
-    name: "Openid Dynamic Client Registration Endpoint Detected"
+    name: "OpenID Dynamic Client Registration Endpoint"
+    description: "Detects OpenID Connect dynamic client registration endpoints that may be vulnerable to SSRF."
     author: "Machiavelli"
-    description: "Actively checks if the OpenID Connect configuration endpoint (/.well-known/openid-configuration) exists and exposes a 'registration_endpoint', indicating dynamic client registration support."
-    tags: "OpenID Connect", "active"
+    tags: "active", "openid", "oauth", "ssrf", "registration"
 
 define:
     config_endpoint = "/.well-known/openid-configuration"

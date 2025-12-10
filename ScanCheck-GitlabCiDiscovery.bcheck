@@ -1,9 +1,9 @@
 metadata:
     language: v2-beta
-    name: "Gitlab Ci Discovery"
-    description: "Tests for exposed GitLab CI files"
+    name: "GitLab CI Configuration Discovery"
+    description: "Detects exposed .gitlab-ci.yml configuration files."
     author: "Patrick Harrison"
-    tags: "exposure", "gitlab", "config", "file"
+    tags: "active", "gitlab", "ci", "config", "exposure"
 
 run for each:
      potential_path =  "/.gitlab-ci.yml"

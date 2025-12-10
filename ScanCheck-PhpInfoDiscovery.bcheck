@@ -1,9 +1,9 @@
 metadata:
     language: v1-beta
-    name: "Php Info Discovery"
-    description: "PHPinfo page was detected. The output of the phpinfo() command can reveal sensitive and detailed PHP environment information."
+    name: "PHP Info Discovery"
+    description: "Detects exposed phpinfo() pages that reveal sensitive PHP environment information."
     author: "@puzzlepeaches"
-    tags: "exposure", "php", "info" 
+    tags: "active", "php", "phpinfo", "exposure" 
 
 run for each:
     potential_path =

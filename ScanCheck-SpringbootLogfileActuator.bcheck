@@ -1,9 +1,9 @@
 metadata:
     language: v1-beta
-    name: "Springboot Logfile Actuator"
-    description: "Springboot logfile actuator exposed and may expose sensitive information"
+    name: "Spring Boot Logfile Actuator Exposure"
+    description: "Spring Boot logfile actuator exposed and may expose sensitive information"
     author: "Mateusz Dabrowski (dbrwsky)"
-	tags: "actuator", "springboot", "exposure", "informative"
+    tags: "active", "actuator", "spring-boot", "exposure", "logs"
 
 run for each:
     potential_path =

@@ -1,9 +1,9 @@
 metadata:
-  language: v1-beta
-  name: "Discord Webhook"
-  description: "Looks for Discord Webhook in page source."
-  author: "@puzzlepeaches"
-  tags: "exposure", "token", "discord"
+    language: v1-beta
+    name: "Discord Webhook Exposure"
+    description: "Detects Discord webhook URLs in HTTP responses."
+    author: "@puzzlepeaches"
+    tags: "passive", "discord", "webhook", "exposure"
 
 given response then
   if {latest.response} matches "https://discordapp\.com/api/webhooks/[0-9]+/[A-Za-z0-9\-]+" then

@@ -1,8 +1,9 @@
 metadata:
     language: v2-beta
     name: "Backup Files Exposure"
-    description: "Checks for the presence of backup files"
+    description: "Checks for the presence of exposed backup files that may contain sensitive information."
     author: "Kaustubh"
+    tags: "active", "backup", "exposure", "file"
 
 run for each:
     potential_path =

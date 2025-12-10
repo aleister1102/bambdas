@@ -1,8 +1,9 @@
 metadata:
     language: v1-beta
-    name: "Exposed Generic Prometheus Metrics"
-    description: "Check for information disclosure from any exporter"
+    name: "Exposed Prometheus Metrics (Generic)"
+    description: "Checks for exposed Prometheus metrics endpoints that may disclose sensitive information."
     author: "@nightshiba"
+    tags: "active", "prometheus", "metrics", "exposure"
 
 run for each:
     # Prometheus metrics most popular endpoints, you can add some more organization-specific

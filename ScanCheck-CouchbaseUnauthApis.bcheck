@@ -1,8 +1,9 @@
 metadata:
     language: v2-beta
-    name: "Couchbase Unauth Apis"
-    description: "Couchbase Buckets REST API without authentication was detected"
+    name: "Couchbase Unauthenticated API"
+    description: "Detects Couchbase Buckets REST API accessible without authentication."
     author: "Nithissh"
+    tags: "active", "couchbase", "api", "unauthenticated", "exposure"
 
 run for each:
     # you could add more values to this list to make the check repeat

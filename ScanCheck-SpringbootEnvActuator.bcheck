@@ -1,9 +1,9 @@
 metadata:
     language: v1-beta
-    name: "Springboot Env Actuator"
-	description: "Springboot env actuator may expose sensitive information"
-	author: "Mateusz Dabrowski (dbrwsky)"
-	tags: "actuator", "springboot", "exposure", "informative"
+    name: "Spring Boot Env Actuator Exposure"
+    description: "Spring Boot env actuator may expose sensitive information"
+    author: "Mateusz Dabrowski (dbrwsky)"
+    tags: "active", "actuator", "spring-boot", "exposure", "config"
 
 run for each:
     potential_path =

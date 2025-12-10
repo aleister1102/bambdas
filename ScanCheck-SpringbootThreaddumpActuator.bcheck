@@ -1,9 +1,9 @@
 metadata:
     language: v1-beta
-    name: "Springboot Threaddump Actuator"
-    description: "Springboot threaddump actuator provides a thread dump from the application's JVM"
+    name: "Spring Boot Threaddump Actuator Exposure"
+    description: "Spring Boot threaddump actuator provides a thread dump from the application's JVM"
     author: "Mateusz Dabrowski (dbrwsky)"
-	tags: "actuator", "springboot", "exposure", "informative"
+    tags: "active", "actuator", "spring-boot", "exposure", "sensitive-data"
 
 run for each:
     potential_path =

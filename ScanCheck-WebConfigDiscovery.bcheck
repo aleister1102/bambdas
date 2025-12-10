@@ -1,9 +1,9 @@
 metadata:
     language: v1-beta
-    name: "Web Config Discovery"
+    name: "IIS Web.config File Disclosure"
     description: "IIS Web configuration file was detected."
     author: "@puzzlepeaches"
-    tags: "exposure", "web", "config", "iis"
+    tags: "active", "exposure", "config", "iis", "windows"
 
 run for each:
     potential_path =

@@ -1,6 +1,6 @@
 metadata:
     language: v2-beta
-    `3429 Bypass"
+    name: "403/429 Bypass"
     description: "Attempts to bypass 403/429 using the HTTP headers with local IP address"
     author: "Shadow Surface"
     tags: "bypass"

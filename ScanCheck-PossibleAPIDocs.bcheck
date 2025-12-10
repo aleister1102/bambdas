@@ -1,8 +1,9 @@
 metadata:
     language: v2-beta
-    name: "Possible API Docs Detected"
-    description: "Checks for potential API docs when API traffic is suspected"
-    tags: "API swagger openapi OAS3 passive"
+    name: "Possible API Documentation"
+    description: "Detects potential API documentation endpoints including Swagger, OpenAPI, and GraphQL."
+    author: "Unknown"
+    tags: "active", "api", "swagger", "openapi", "documentation"
 
 run for each:
     # Use common Swagger paths as a base for potential API doc paths.

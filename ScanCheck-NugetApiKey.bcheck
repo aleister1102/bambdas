@@ -1,9 +1,9 @@
 metadata:
-  language: v1-beta
-  name: "Nuget Api Key"
-  description: "Looks for NuGet API keys in page source."
-  author: "@puzzlepeaches"
-  tags: "nuget", "token", "exposure" 
+    language: v1-beta
+    name: "NuGet API Key"
+    description: "Detects NuGet API keys in HTTP responses."
+    author: "@puzzlepeaches"
+    tags: "passive", "nuget", "api-key", "exposure" 
 
 given response then
   if {latest.response} matches "oy2[a-z0-9]{43}" then

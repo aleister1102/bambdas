@@ -1,8 +1,9 @@
 metadata:
     language: v2-beta
-    name: "Dockerrun Aws Config Page Exposure"
-    description: "Dockerrun AWS configuration page was detected"
+    name: "Dockerrun AWS Configuration Exposure"
+    description: "Detects exposed Dockerrun.aws.json configuration files containing container definitions."
     author: "Nithissh"
+    tags: "active", "docker", "aws", "config", "exposure"
 
 run for each:
     # you could add more values to this list to make the check repeat

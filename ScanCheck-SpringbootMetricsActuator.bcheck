@@ -1,9 +1,9 @@
 metadata:
     language: v1-beta
-    name: "Springboot Metrics Actuator"
-    description: "Springboot metrics actuator may expose sensitive information"
+    name: "Spring Boot Metrics Actuator Exposure"
+    description: "Spring Boot metrics actuator may expose sensitive information"
     author: "Mateusz Dabrowski (dbrwsky)"
-	tags: "actuator", "springboot", "exposure", "informative"
+    tags: "active", "actuator", "spring-boot", "exposure", "metrics"
 
 run for each:
     potential_path =

@@ -1,9 +1,9 @@
 metadata:
     language: v1-beta
-    name: "Springboot Loggers Actuator"
-    description: "Springboot loggers actuator exposed"
+    name: "Spring Boot Loggers Actuator Exposure"
+    description: "Spring Boot loggers actuator exposed"
     author: "Mateusz Dabrowski (dbrwsky)"
-	tags: "actuator", "springboot", "exposure", "informative"
+    tags: "active", "actuator", "spring-boot", "exposure", "logs"
 
 run for each:
     potential_path =

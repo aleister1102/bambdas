@@ -1,9 +1,9 @@
 metadata:
     language: v1-beta
-    name: "C V E20255777 Citrixbleed2"
-    description: "This rule checks if the remote host is vulnerable to CVE-2025-5777 - CitrixBleed 2"
+    name: "CVE-2025-5777 - CitrixBleed 2"
+    description: "Checks for CVE-2025-5777 (CitrixBleed 2) memory leak vulnerability in Citrix NetScaler."
     author: "Felipe Molina (@felmoltor)"
-    tags: "CVE-2025-5777","citrix","netscaler","leak"
+    tags: "active", "cve", "citrix", "netscaler", "memory-leak"
 
 define:
     login_path =

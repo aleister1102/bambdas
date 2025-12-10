@@ -1,9 +1,9 @@
 metadata:
     language: v1-beta
-    name: "Springboot Caches Actuator"
-    description: "Springboot caches actuator exposed"
+    name: "Spring Boot Caches Actuator Exposure"
+    description: "Spring Boot caches actuator exposed"
     author: "Mateusz Dabrowski (dbrwsky)"
-	tags: "actuator", "springboot", "exposure", "informative"
+    tags: "active", "actuator", "spring-boot", "exposure"
 
 run for each:
     potential_path =

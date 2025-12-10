@@ -1,9 +1,9 @@
 metadata:
     language: v2-beta
-    name: "C V E202527636 Apache Camel Exec Override Via Mixed Case Header"
-    description: "This rule checks if the remote host is vulnerable to CVE-2025-27636 - Exec override via mixed-case header in Apache Camel"
+    name: "CVE-2025-27636 - Apache Camel Exec Override"
+    description: "Checks for CVE-2025-27636 vulnerability allowing exec override via mixed-case header in Apache Camel."
     author: "Maxwell Francis (@xerodium)"
-    tags: "CVE-2025-27636","Apache Camel","Camel","RCE"
+    tags: "active", "cve", "apache", "camel", "rce", "header-injection"
 
 given path then
   # Send a harmless probe that attempts to override the exec command to `echo`.

@@ -1,8 +1,9 @@
 metadata:
     language: v1-beta
     name: "Exposed Prometheus Metrics"
-    description: "Prometheus Metrics Found"
+    description: "Detects exposed Prometheus metrics endpoint at /metrics."
     author: "Sourav Kalal"
+    tags: "active", "prometheus", "metrics", "exposure"
 
 define:
     potential_path = "/metrics"

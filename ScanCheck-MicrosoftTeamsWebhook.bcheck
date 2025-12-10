@@ -1,9 +1,9 @@
 metadata:
-  language: v1-beta
-  name: "Microsoft Teams Webhook"
-  description: "Detects a Microsoft Teams Webhook disclosure in page source."
-  author: "@puzzlepeaches"
-  tags: "exposure", "token", "microsoft" 
+    language: v1-beta
+    name: "Microsoft Teams Webhook"
+    description: "Detects Microsoft Teams webhook URLs in HTTP responses."
+    author: "@puzzlepeaches"
+    tags: "passive", "microsoft", "teams", "webhook", "exposure" 
 
 given response then
   if {latest.response} matches "https://outlook\.office\.com/webhook/[A-Za-z0-9\-@]+/IncomingWebhook/[A-Za-z0-9\-]+/[A-Za-z0-9\-]+" then

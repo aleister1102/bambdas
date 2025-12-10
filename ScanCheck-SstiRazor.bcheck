@@ -1,9 +1,9 @@
 metadata:
     language: v2-beta
-    name: "Ssti Razor"
+    name: "SSTI - ASP.NET Razor Template Injection"
     description: "Inserts a .NET Razor SSTI payload into each parameter to detect suspicious input evaluation"
     author: "alp1n3.eth"
-    tags: "active", "injection", "template", "template injection", "scan", "ssti", "razor"
+    tags: "active", "injection", "ssti", "razor", "asp.net", "rce"
     # reference 1: https://clement.notin.org/blog/2020/04/15/Server-Side-Template-Injection-(SSTI)-in-ASP.NET-Razor/
     # reference 2: https://www.schtech.co.uk/razor-pages-ssti-rce/
 

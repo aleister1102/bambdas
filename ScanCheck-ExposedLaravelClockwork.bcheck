@@ -1,9 +1,9 @@
 metadata:
     language: v1-beta
     name: "Exposed Laravel Clockwork"
-    description: "A Laravel Clockwork php dev tools was discovered, which exposed cleartext HTTP request, responses, passwords, tokens and some information containing app secrets. "
+    description: "Detects exposed Laravel Clockwork debug tool which may reveal HTTP requests, responses, passwords, and tokens."
     author: "Yasin Yilmaz"
-    tags: "laravel", "clockwork", "php"
+    tags: "active", "laravel", "clockwork", "php", "debug", "exposure"
 
 run for each:
     potential_path =

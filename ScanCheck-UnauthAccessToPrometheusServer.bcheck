@@ -1,9 +1,9 @@
 metadata:
     language: v1-beta
-    name: "Unauth Access To Prometheus Server"
+    name: "Unauthenticated Prometheus Server Access"
     description: "Check if the Prometheus Server is publicly accessible."
     author: "@nightshiba"
-    tags: "passive"
+    tags: "passive", "prometheus", "exposure", "authentication"
 
 given response then
     if {latest.response.status_code} is "200"

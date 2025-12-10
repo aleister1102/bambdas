@@ -1,9 +1,9 @@
 metadata:
     language: v2-beta
-    name: "Infrastructure And Database Disclosure Detection"
-    description: "Extensive scanning of response bodies for database errors (SQL/NoSQL), application stack traces (Node, Java, Python, Go, Ruby, PHP, .NET), cloud metadata, and system file leaks."
+    name: "Infrastructure and Database Disclosure"
+    description: "Detects database errors, application stack traces, cloud metadata, and system file leaks in HTTP responses."
     author: "Kaustubh"
-    tags: "passive", "information-disclosure", "database", "infrastructure", "cloud", "modern-stack"
+    tags: "passive", "information-disclosure", "database", "infrastructure", "cloud"
 
 given response then
     # Optimization: specific checks to skip binary files to save resources
