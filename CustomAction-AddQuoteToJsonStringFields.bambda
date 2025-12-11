@@ -15,19 +15,17 @@ source: |+
   var request = requestResponse.request();
   var httpVersion = request.httpVersion().equals("HTTP/2") ? HttpMode.HTTP_2 : HttpMode.HTTP_1;
   
-  // Get the full path with query string
   String fullPath = request.path();
   int queryStart = fullPath.indexOf("?");
   
   if (queryStart == -1) {
-      logging().logToOutput("No query parameters found");
+      logging().logToOutput("[!] No query parameters found");
       return;
   }
   
   String pathWithoutQuery = fullPath.substring(0, queryStart);
   String queryString = fullPath.substring(queryStart + 1);
   
-  // Find URL-encoded JSON in query parameters
   String[] params = queryString.split("&");
   String targetParamName = null;
   String encodedJson = null;
@@ -38,7 +36,6 @@ source: |+
       int eqIndex = param.indexOf("=");
       if (eqIndex > 0) {
           String value = param.substring(eqIndex + 1);
-          // Detect URL-encoded JSON
           if (value.startsWith("%7b") || value.startsWith("%7B")) {
               targetParamName = param.substring(0, eqIndex);
               encodedJson = value;
@@ -49,87 +46,63 @@ source: |+
   }
   
   if (encodedJson == null) {
-      logging().logToOutput("No URL-encoded JSON found in query parameters");
+      logging().logToOutput("[!] No URL-encoded JSON found in query parameters");
       return;
   }
   
-  // Decode the JSON using Burp's URL utilities
   String decodedJson = utilities().urlUtils().decode(encodedJson);
   
-  logging().logToOutput("Original JSON: " + decodedJson);
-  logging().logToOutput("-------------------------------------------");
+  logging().logToOutput("[*] Original: " + decodedJson);
   
-  // Find all string values in JSON by looking for ":"value" patterns
-  // We'll track positions where we find string values
   var stringPositions = new java.util.ArrayList();
   var fieldNames = new java.util.ArrayList();
   var fieldValues = new java.util.ArrayList();
   var insertionPayloads = new java.util.ArrayList();
 
-  // Regex parser to find "key":"value" patterns (string values)
+  // Find "key":"value" patterns
   java.util.regex.Pattern p = java.util.regex.Pattern.compile("\"([^\"]+)\"\\s*:\\s*\"([^\"]*)\"");
   java.util.regex.Matcher m = p.matcher(decodedJson);
   while (m.find()) {
-      int valueStart = m.start(2);
-      int valueEnd = m.end(2);
-      String keyName = m.group(1);
-      String fieldValue = m.group(2);
-      stringPositions.add(new int[]{valueStart, valueEnd});
-      fieldNames.add(keyName);
-      fieldValues.add(fieldValue);
+      stringPositions.add(new int[]{m.start(2), m.end(2)});
+      fieldNames.add(m.group(1));
+      fieldValues.add(m.group(2));
       insertionPayloads.add("'");
   }
 
-  // Regex parser to find empty arrays "key":[] or "key": []
-  // We want to inject into these by adding a string element
+  // Find empty arrays "key":[]
   java.util.regex.Pattern pArray = java.util.regex.Pattern.compile("\"([^\"]+)\"\\s*:\\s*(\\[\\s*\\])");
   java.util.regex.Matcher mArray = pArray.matcher(decodedJson);
   while (mArray.find()) {
-      // Group 1 is key name
-      // Group 2 is []
-      String keyName = mArray.group(1);
-      int arrayEnd = mArray.end(2);
-      // We insert before the closing bracket ']'
-      // arrayEnd points after ']', so arrayEnd - 1 is index of ']'
-      int insertionPoint = arrayEnd - 1;
-      
+      int insertionPoint = mArray.end(2) - 1;
       stringPositions.add(new int[]{mArray.start(2), insertionPoint});
-      fieldNames.add(keyName + " (empty array)");
+      fieldNames.add(mArray.group(1) + " (empty array)");
       fieldValues.add("[]");
-      // Insert "bambda'" inside the array
       insertionPayloads.add("\"bambda'\"");
   }
   
-  // Also find strings in arrays like ["value1","value2"]
+  // Find strings in arrays like ["value1","value2"]
   int pos = 0;
   while (pos < decodedJson.length()) {
       int bracketStart = decodedJson.indexOf("[\"", pos);
       if (bracketStart == -1) {
-          // Also check for comma-separated strings in arrays
           int commaQuote = decodedJson.indexOf(",\"", pos);
           if (commaQuote == -1) break;
           
-          // Check if we're inside an array
           int lastBracket = decodedJson.lastIndexOf("[", commaQuote);
           int lastCloseBracket = decodedJson.lastIndexOf("]", commaQuote);
           if (lastBracket > lastCloseBracket) {
               int valueStart = commaQuote + 2;
               int valueEnd = decodedJson.indexOf("\"", valueStart);
               if (valueEnd > valueStart) {
-                  // Check if not already tracked
                   boolean isDuplicate = false;
                   for (int i = 0; i < stringPositions.size(); i++) {
                       int[] existingPos = (int[]) stringPositions.get(i);
-                      if (existingPos[0] == valueStart) {
-                          isDuplicate = true;
-                          break;
-                      }
+                      if (existingPos[0] == valueStart) { isDuplicate = true; break; }
                   }
                   if (!isDuplicate) {
-                      String arrayValue = decodedJson.substring(valueStart, valueEnd);
                       stringPositions.add(new int[]{valueStart, valueEnd});
                       fieldNames.add("array_item");
-                      fieldValues.add(arrayValue);
+                      fieldValues.add(decodedJson.substring(valueStart, valueEnd));
                       insertionPayloads.add("'");
                   }
               }
@@ -141,61 +114,36 @@ source: |+
       int valueStart = bracketStart + 2;
       int valueEnd = decodedJson.indexOf("\"", valueStart);
       if (valueEnd > valueStart) {
-          // Check if not already tracked
           boolean isDuplicate = false;
           for (int i = 0; i < stringPositions.size(); i++) {
               int[] existingPos = (int[]) stringPositions.get(i);
-              if (existingPos[0] == valueStart) {
-                  isDuplicate = true;
-                  break;
-              }
+              if (existingPos[0] == valueStart) { isDuplicate = true; break; }
           }
           if (!isDuplicate) {
-              String arrayValue = decodedJson.substring(valueStart, valueEnd);
               stringPositions.add(new int[]{valueStart, valueEnd});
               fieldNames.add("array_item");
-              fieldValues.add(arrayValue);
+              fieldValues.add(decodedJson.substring(valueStart, valueEnd));
               insertionPayloads.add("'");
           }
       }
       pos = bracketStart + 2;
   }
   
-  logging().logToOutput("===========================================");
-  logging().logToOutput("FOUND " + stringPositions.size() + " STRING FIELDS TO TEST");
-  logging().logToOutput("===========================================");
-  logging().logToOutput("");
-  
-  // List all fields that will be tested
-  logging().logToOutput("Fields to be tested:");
-  for (int i = 0; i < stringPositions.size(); i++) {
-      String fn = (String) fieldNames.get(i);
-      String fv = (String) fieldValues.get(i);
-      logging().logToOutput("  [" + (i + 1) + "] " + fn + " = \"" + fv + "\"");
-  }
-  logging().logToOutput("");
-  logging().logToOutput("===========================================");
-  logging().logToOutput("STARTING INJECTION TESTS");
-  logging().logToOutput("===========================================");
-  logging().logToOutput("");
+  logging().logToOutput("[*] Found " + stringPositions.size() + " string fields to test\n");
   
   int requestCount = 0;
+  int total = stringPositions.size();
   
-  // Iterate through each string field and add a quote
-  for (int i = 0; i < stringPositions.size(); i++) {
+  for (int i = 0; i < total; i++) {
       int[] positions = (int[]) stringPositions.get(i);
       String fieldName = (String) fieldNames.get(i);
       String originalValue = (String) fieldValues.get(i);
       String payload = (String) insertionPayloads.get(i);
       String injectedValue = originalValue + payload;
       
-      // Create modified JSON with quote added to this field
       String modifiedJson = decodedJson.substring(0, positions[1]) + payload + decodedJson.substring(positions[1]);
-      
-      // URL encode the modified JSON
       String encodedModifiedJson = utilities().urlUtils().encode(modifiedJson);
       
-      // Rebuild the query string with modified JSON
       StringBuilder newQueryString = new StringBuilder();
       for (int j = 0; j < params.length; j++) {
           if (j > 0) newQueryString.append("&");
@@ -206,31 +154,39 @@ source: |+
           }
       }
       
-      // Create new path with modified query
       String newPath = pathWithoutQuery + "?" + newQueryString.toString();
-      
-      // Create modified request
       var modifiedRequest = request.withPath(newPath);
       
-      // Send the request
       requestCount++;
       
       try {
           var response = api().http().sendRequest(modifiedRequest, httpVersion);
+          
+          if (response.response() == null) {
+              logging().logToOutput(String.format("[%d/%d] %s.%s: \"%s\" -> \"%s\" | NO RESPONSE",
+                  requestCount, total, targetParamName, fieldName, originalValue, injectedValue));
+              continue;
+          }
+          
           int statusCode = response.response().statusCode();
           int responseLength = response.response().body() == null ? 0 : response.response().body().length();
           
-          logging().logToOutput(String.format("[%d/%d] Param: %s Field: %s | Val: \"%s\" -> \"%s\" | Status: %d | Len: %d",
-              requestCount, stringPositions.size(), targetParamName, fieldName, originalValue, injectedValue, statusCode, responseLength));
+          logging().logToOutput(String.format("[%d/%d] %s.%s: \"%s\" -> \"%s\" | %d | %d bytes",
+              requestCount, total, targetParamName, fieldName, originalValue, injectedValue, statusCode, responseLength));
           
-          // Update response pane with this response
+          // Show error response body for 4xx/5xx
+          if (statusCode >= 400 && response.response().body() != null) {
+              String body = response.response().bodyToString();
+              if (body.length() > 500) body = body.substring(0, 500) + "...";
+              logging().logToOutput("    Response: " + body);
+          }
+          
           httpEditor.responsePane().set(response.response().toByteArray());
           
       } catch (Exception e) {
-          logging().logToOutput(String.format("[%d/%d] Param: %s Field: %s | Error: %s", requestCount, stringPositions.size(), targetParamName, fieldName, e.getMessage()));
+          logging().logToOutput(String.format("[%d/%d] %s.%s | ERROR: %s",
+              requestCount, total, targetParamName, fieldName, e.getMessage()));
       }
   }
   
-  logging().logToOutput("===========================================");
-  logging().logToOutput("COMPLETED: Tested " + requestCount + " string fields");
-  logging().logToOutput("===========================================");
+  logging().logToOutput("\n[*] Completed: " + requestCount + " tests");

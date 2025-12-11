@@ -15,11 +15,9 @@ source: |+
   var request = requestResponse.request();
   var httpVersion = request.httpVersion().equals("HTTP/2") ? HttpMode.HTTP_2 : HttpMode.HTTP_1;
   
-  // Get all parameters
   var allParams = request.parameters();
   var paramsToTest = new java.util.ArrayList();
   
-  // Filter interesting parameters
   for (var param : allParams) {
       var type = param.type();
       if (type == HttpParameterType.URL || 
@@ -30,7 +28,7 @@ source: |+
       }
   }
   
-  logging().logToOutput("Found " + paramsToTest.size() + " parameters to test.");
+  logging().logToOutput("[*] Found " + paramsToTest.size() + " parameters to test\n");
   
   int requestCount = 0;
   int total = paramsToTest.size();
@@ -40,24 +38,37 @@ source: |+
       String originalValue = param.value();
       String injectedValue = originalValue + "'";
       
-      // Create new parameter with injected value
       var newParam = HttpParameter.parameter(param.name(), injectedValue, param.type());
-      
-      // Create modified request
       var modifiedRequest = request.withParameter(newParam);
       
       requestCount++;
       
       try {
           var response = api().http().sendRequest(modifiedRequest, httpVersion);
+          
+          if (response.response() == null) {
+              logging().logToOutput(String.format("[%d/%d] %s (%s): \"%s\" -> \"%s\" | NO RESPONSE",
+                  requestCount, total, param.name(), param.type().toString(), originalValue, injectedValue));
+              continue;
+          }
+          
           int statusCode = response.response().statusCode();
           int responseLength = response.response().body() == null ? 0 : response.response().body().length();
           
-          // Compact Log
-          logging().logToOutput(String.format("[%d/%d] Param: %s (%s) | Val: \"%s\" -> \"%s\" | Status: %d | Len: %d",
+          logging().logToOutput(String.format("[%d/%d] %s (%s): \"%s\" -> \"%s\" | %d | %d bytes",
               requestCount, total, param.name(), param.type().toString(), originalValue, injectedValue, statusCode, responseLength));
+          
+          // Show error response body for 4xx/5xx
+          if (statusCode >= 400 && response.response().body() != null) {
+              String body = response.response().bodyToString();
+              if (body.length() > 500) body = body.substring(0, 500) + "...";
+              logging().logToOutput("    Response: " + body);
+          }
               
       } catch (Exception e) {
-          logging().logToOutput(String.format("[%d/%d] Param: %s | Error: %s", requestCount, total, param.name(), e.getMessage()));
+          logging().logToOutput(String.format("[%d/%d] %s | ERROR: %s",
+              requestCount, total, param.name(), e.getMessage()));
       }
   }
+  
+  logging().logToOutput("\n[*] Completed: " + requestCount + " tests");
