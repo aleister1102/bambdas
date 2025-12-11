@@ -4,12 +4,13 @@ function: CUSTOM_ACTION
 location: REPEATER
 source: |+
   /**
-   * Iterates through URL-encoded JSON in query parameters and adds a single quote
-   * to each string field one at a time, sending a request for each modification.
+   * Iterates through URL-encoded JSON in query parameters AND request body,
+   * adds a single quote to each string and number field one at a time,
+   * sending a request for each modification.
    * 
    * Useful for SQL injection testing on JSON-based APIs.
    *
-   * @author quan.m.le
+   * @author insomnia1102
    **/
   
   var request = requestResponse.request();
@@ -17,20 +18,15 @@ source: |+
   
   String fullPath = request.path();
   int queryStart = fullPath.indexOf("?");
+  String pathWithoutQuery = queryStart == -1 ? fullPath : fullPath.substring(0, queryStart);
+  String queryString = queryStart == -1 ? "" : fullPath.substring(queryStart + 1);
   
-  if (queryStart == -1) {
-      logging().logToOutput("[!] No query parameters found");
-      return;
-  }
-  
-  String pathWithoutQuery = fullPath.substring(0, queryStart);
-  String queryString = fullPath.substring(queryStart + 1);
-  
-  String[] params = queryString.split("&");
+  String[] params = queryString.isEmpty() ? new String[0] : queryString.split("&");
   String targetParamName = null;
   String encodedJson = null;
   int targetParamIndex = -1;
   
+  // Check query parameters for JSON
   for (int i = 0; i < params.length; i++) {
       String param = params[i];
       int eqIndex = param.indexOf("=");
@@ -45,148 +41,626 @@ source: |+
       }
   }
   
-  if (encodedJson == null) {
-      logging().logToOutput("[!] No URL-encoded JSON found in query parameters");
-      return;
+  // Check request body for JSON
+  String bodyJson = null;
+  boolean hasJsonBody = false;
+  if (request.body() != null && request.body().length() > 0) {
+      String bodyStr = request.bodyToString().trim();
+      if (bodyStr.startsWith("{") || bodyStr.startsWith("[")) {
+          bodyJson = bodyStr;
+          hasJsonBody = true;
+      }
   }
   
-  String decodedJson = utilities().urlUtils().decode(encodedJson);
+  // Check for multipart form data with JSON fields
+  var multipartJsonFields = new java.util.ArrayList(); // List of Object[]{fieldName, jsonValue, startPos, endPos}
+  String contentType = request.headerValue("Content-Type");
+  boolean hasMultipart = false;
+  String boundary = null;
+  String fullBody = null;
   
-  logging().logToOutput("[*] Original: " + decodedJson);
-  
-  var stringPositions = new java.util.ArrayList();
-  var fieldNames = new java.util.ArrayList();
-  var fieldValues = new java.util.ArrayList();
-  var insertionPayloads = new java.util.ArrayList();
-
-  // Find "key":"value" patterns
-  java.util.regex.Pattern p = java.util.regex.Pattern.compile("\"([^\"]+)\"\\s*:\\s*\"([^\"]*)\"");
-  java.util.regex.Matcher m = p.matcher(decodedJson);
-  while (m.find()) {
-      stringPositions.add(new int[]{m.start(2), m.end(2)});
-      fieldNames.add(m.group(1));
-      fieldValues.add(m.group(2));
-      insertionPayloads.add("'");
-  }
-
-  // Find empty arrays "key":[]
-  java.util.regex.Pattern pArray = java.util.regex.Pattern.compile("\"([^\"]+)\"\\s*:\\s*(\\[\\s*\\])");
-  java.util.regex.Matcher mArray = pArray.matcher(decodedJson);
-  while (mArray.find()) {
-      int insertionPoint = mArray.end(2) - 1;
-      stringPositions.add(new int[]{mArray.start(2), insertionPoint});
-      fieldNames.add(mArray.group(1) + " (empty array)");
-      fieldValues.add("[]");
-      insertionPayloads.add("\"bambda'\"");
-  }
-  
-  // Find strings in arrays like ["value1","value2"]
-  int pos = 0;
-  while (pos < decodedJson.length()) {
-      int bracketStart = decodedJson.indexOf("[\"", pos);
-      if (bracketStart == -1) {
-          int commaQuote = decodedJson.indexOf(",\"", pos);
-          if (commaQuote == -1) break;
+  if (contentType != null && contentType.contains("multipart/form-data")) {
+      int boundaryIdx = contentType.indexOf("boundary=");
+      if (boundaryIdx != -1) {
+          boundary = contentType.substring(boundaryIdx + 9);
+          if (boundary.startsWith("\"") && boundary.endsWith("\"")) {
+              boundary = boundary.substring(1, boundary.length() - 1);
+          }
+          fullBody = request.bodyToString();
           
-          int lastBracket = decodedJson.lastIndexOf("[", commaQuote);
-          int lastCloseBracket = decodedJson.lastIndexOf("]", commaQuote);
-          if (lastBracket > lastCloseBracket) {
-              int valueStart = commaQuote + 2;
-              int valueEnd = decodedJson.indexOf("\"", valueStart);
-              if (valueEnd > valueStart) {
-                  boolean isDuplicate = false;
-                  for (int i = 0; i < stringPositions.size(); i++) {
-                      int[] existingPos = (int[]) stringPositions.get(i);
-                      if (existingPos[0] == valueStart) { isDuplicate = true; break; }
-                  }
-                  if (!isDuplicate) {
-                      stringPositions.add(new int[]{valueStart, valueEnd});
-                      fieldNames.add("array_item");
-                      fieldValues.add(decodedJson.substring(valueStart, valueEnd));
-                      insertionPayloads.add("'");
+          // Parse multipart parts to find JSON values
+          String[] parts = fullBody.split("--" + boundary);
+          int currentPos = 0;
+          for (String part : parts) {
+              if (part.trim().isEmpty() || part.trim().equals("--")) continue;
+              
+              // Find field name
+              java.util.regex.Pattern namePattern = java.util.regex.Pattern.compile("name=\"([^\"]+)\"");
+              java.util.regex.Matcher nameMatcher = namePattern.matcher(part);
+              if (nameMatcher.find()) {
+                  String fieldName = nameMatcher.group(1);
+                  
+                  // Find the value (after double newline)
+                  int valueStart = part.indexOf("\r\n\r\n");
+                  if (valueStart == -1) valueStart = part.indexOf("\n\n");
+                  if (valueStart != -1) {
+                      valueStart += (part.charAt(valueStart) == '\r') ? 4 : 2;
+                      String value = part.substring(valueStart).trim();
+                      
+                      // Check if value is JSON
+                      if (value.startsWith("{") || value.startsWith("[")) {
+                          // Find actual position in full body
+                          int partStartInBody = fullBody.indexOf(part);
+                          int jsonStartInBody = partStartInBody + valueStart;
+                          int jsonEndInBody = jsonStartInBody + value.length();
+                          
+                          // Trim trailing boundary markers
+                          if (value.endsWith("--")) {
+                              value = value.substring(0, value.length() - 2).trim();
+                              jsonEndInBody = jsonStartInBody + value.length();
+                          }
+                          if (value.endsWith("\r\n") || value.endsWith("\n")) {
+                              value = value.trim();
+                              jsonEndInBody = jsonStartInBody + value.length();
+                          }
+                          
+                          multipartJsonFields.add(new Object[]{fieldName, value, jsonStartInBody, jsonEndInBody});
+                          hasMultipart = true;
+                      }
                   }
               }
           }
-          pos = commaQuote + 2;
-          continue;
+      }
+  }
+  
+  if (encodedJson == null && !hasJsonBody && !hasMultipart) {
+      logging().logToOutput("[!] No JSON found in query parameters, request body, or multipart fields");
+      return;
+  }
+  
+  logging().logToOutput("[*] Check Organizer for error responses (4xx/5xx)\n");
+  
+  int requestCount = 0;
+  
+  // Process query parameter JSON
+  if (encodedJson != null) {
+      String decodedJson = utilities().urlUtils().decode(encodedJson);
+      logging().logToOutput("[*] Query Param JSON: " + decodedJson);
+      
+      var injectionPoints = new java.util.ArrayList();
+      
+      // Find "key":"value" patterns (strings)
+      java.util.regex.Pattern p = java.util.regex.Pattern.compile("\"([^\"]+)\"\\s*:\\s*\"([^\"]*)\"");
+      java.util.regex.Matcher m = p.matcher(decodedJson);
+      while (m.find()) {
+          injectionPoints.add(new Object[]{new int[]{m.start(2), m.end(2)}, m.group(1), m.group(2), "'", "string"});
       }
       
-      int valueStart = bracketStart + 2;
-      int valueEnd = decodedJson.indexOf("\"", valueStart);
-      if (valueEnd > valueStart) {
+      // Find "key":number patterns - test both "num" and "num'"
+      java.util.regex.Pattern pNum = java.util.regex.Pattern.compile("\"([^\"]+)\"\\s*:\\s*(-?\\d+\\.?\\d*)");
+      java.util.regex.Matcher mNum = pNum.matcher(decodedJson);
+      while (mNum.find()) {
+          int numStart = mNum.start(2);
+          int numEnd = mNum.end(2);
+          String numValue = mNum.group(2);
+          // First test: convert number to string "num"
+          injectionPoints.add(new Object[]{new int[]{numStart, numEnd}, mNum.group(1), numValue, "\"" + numValue + "\"", "number->string"});
+          // Second test: convert number to string with quote "num'"
+          injectionPoints.add(new Object[]{new int[]{numStart, numEnd}, mNum.group(1), numValue, "\"" + numValue + "'\"", "number->string'"});
+      }
+      
+      // Find empty arrays "key":[]
+      java.util.regex.Pattern pArray = java.util.regex.Pattern.compile("\"([^\"]+)\"\\s*:\\s*(\\[\\s*\\])");
+      java.util.regex.Matcher mArray = pArray.matcher(decodedJson);
+      while (mArray.find()) {
+          int insertionPoint = mArray.end(2) - 1;
+          injectionPoints.add(new Object[]{new int[]{mArray.start(2), insertionPoint}, mArray.group(1) + " (empty array)", "[]", "\"bambda'\"", "array"});
+      }
+      
+      // Find strings in arrays
+      java.util.regex.Pattern pArrayStr = java.util.regex.Pattern.compile("\\[\\s*\"([^\"]*)\"");
+      java.util.regex.Matcher mArrayStr = pArrayStr.matcher(decodedJson);
+      while (mArrayStr.find()) {
+          int valueStart = mArrayStr.start(1);
+          int valueEnd = mArrayStr.end(1);
           boolean isDuplicate = false;
-          for (int i = 0; i < stringPositions.size(); i++) {
-              int[] existingPos = (int[]) stringPositions.get(i);
+          for (int i = 0; i < injectionPoints.size(); i++) {
+              Object[] existing = (Object[]) injectionPoints.get(i);
+              int[] existingPos = (int[]) existing[0];
               if (existingPos[0] == valueStart) { isDuplicate = true; break; }
           }
           if (!isDuplicate) {
-              stringPositions.add(new int[]{valueStart, valueEnd});
-              fieldNames.add("array_item");
-              fieldValues.add(decodedJson.substring(valueStart, valueEnd));
-              insertionPayloads.add("'");
+              injectionPoints.add(new Object[]{new int[]{valueStart, valueEnd}, "array_item", mArrayStr.group(1), "'", "string"});
           }
       }
-      pos = bracketStart + 2;
-  }
-  
-  logging().logToOutput("[*] Found " + stringPositions.size() + " string fields to test\n");
-  
-  int requestCount = 0;
-  int total = stringPositions.size();
-  
-  for (int i = 0; i < total; i++) {
-      int[] positions = (int[]) stringPositions.get(i);
-      String fieldName = (String) fieldNames.get(i);
-      String originalValue = (String) fieldValues.get(i);
-      String payload = (String) insertionPayloads.get(i);
-      String injectedValue = originalValue + payload;
       
-      String modifiedJson = decodedJson.substring(0, positions[1]) + payload + decodedJson.substring(positions[1]);
-      String encodedModifiedJson = utilities().urlUtils().encode(modifiedJson);
+      // Find numbers in arrays - test both "num" and "num'"
+      java.util.regex.Pattern pArrayNum = java.util.regex.Pattern.compile("\\[\\s*(-?\\d+\\.?\\d*)");
+      java.util.regex.Matcher mArrayNum = pArrayNum.matcher(decodedJson);
+      while (mArrayNum.find()) {
+          int numStart = mArrayNum.start(1);
+          int numEnd = mArrayNum.end(1);
+          String numValue = mArrayNum.group(1);
+          boolean isDuplicate = false;
+          for (int i = 0; i < injectionPoints.size(); i++) {
+              Object[] existing = (Object[]) injectionPoints.get(i);
+              int[] existingPos = (int[]) existing[0];
+              if (existingPos[0] == numStart) { isDuplicate = true; break; }
+          }
+          if (!isDuplicate) {
+              injectionPoints.add(new Object[]{new int[]{numStart, numEnd}, "array_num", numValue, "\"" + numValue + "\"", "number->string"});
+              injectionPoints.add(new Object[]{new int[]{numStart, numEnd}, "array_num", numValue, "\"" + numValue + "'\"", "number->string'"});
+          }
+      }
       
-      StringBuilder newQueryString = new StringBuilder();
-      for (int j = 0; j < params.length; j++) {
-          if (j > 0) newQueryString.append("&");
-          if (j == targetParamIndex) {
-              newQueryString.append(targetParamName).append("=").append(encodedModifiedJson);
+      logging().logToOutput("[*] Found " + injectionPoints.size() + " field(s) to test in query\n");
+      
+      int total = injectionPoints.size();
+      for (int i = 0; i < total; i++) {
+          Object[] point = (Object[]) injectionPoints.get(i);
+          int[] positions = (int[]) point[0];
+          String fieldName = (String) point[1];
+          String originalValue = (String) point[2];
+          String payload = (String) point[3];
+          String fieldType = (String) point[4];
+          
+          String modifiedJson;
+          String injectedValue;
+          // For number fields, replace the entire value; for strings, append payload
+          if (fieldType.startsWith("number")) {
+              modifiedJson = decodedJson.substring(0, positions[0]) + payload + decodedJson.substring(positions[1]);
+              injectedValue = payload;
           } else {
-              newQueryString.append(params[j]);
+              modifiedJson = decodedJson.substring(0, positions[1]) + payload + decodedJson.substring(positions[1]);
+              injectedValue = originalValue + payload;
           }
-      }
-      
-      String newPath = pathWithoutQuery + "?" + newQueryString.toString();
-      var modifiedRequest = request.withPath(newPath);
-      
-      requestCount++;
-      
-      try {
-          var response = api().http().sendRequest(modifiedRequest, httpVersion);
+          String encodedModifiedJson = utilities().urlUtils().encode(modifiedJson);
           
-          if (response.response() == null) {
-              logging().logToOutput(String.format("[%d/%d] %s.%s: \"%s\" -> \"%s\" | NO RESPONSE",
-                  requestCount, total, targetParamName, fieldName, originalValue, injectedValue));
-              continue;
+          StringBuilder newQueryString = new StringBuilder();
+          for (int j = 0; j < params.length; j++) {
+              if (j > 0) newQueryString.append("&");
+              if (j == targetParamIndex) {
+                  newQueryString.append(targetParamName).append("=").append(encodedModifiedJson);
+              } else {
+                  newQueryString.append(params[j]);
+              }
           }
           
-          int statusCode = response.response().statusCode();
-          int responseLength = response.response().body() == null ? 0 : response.response().body().length();
+          String newPath = pathWithoutQuery + "?" + newQueryString.toString();
+          var modifiedRequest = request.withPath(newPath);
           
-          logging().logToOutput(String.format("[%d/%d] %s.%s: \"%s\" -> \"%s\" | %d | %d bytes",
-              requestCount, total, targetParamName, fieldName, originalValue, injectedValue, statusCode, responseLength));
+          requestCount++;
           
-          // Show error response body for 4xx/5xx
-          if (statusCode >= 400 && response.response().body() != null) {
-              String body = response.response().bodyToString();
-              if (body.length() > 500) body = body.substring(0, 500) + "...";
-              logging().logToOutput("    Response: " + body);
+          try {
+              var response = api().http().sendRequest(modifiedRequest, httpVersion);
+              
+              if (response.response() == null) {
+                  logging().logToOutput(String.format("[%d/%d] [query] %s.%s (%s): \"%s\" -> \"%s\" | NO RESPONSE",
+                      requestCount, total, targetParamName, fieldName, fieldType, originalValue, injectedValue));
+                  continue;
+              }
+              
+              int statusCode = response.response().statusCode();
+              int responseLength = response.response().body() == null ? 0 : response.response().body().length();
+              
+              logging().logToOutput(String.format("[%d/%d] [query] %s.%s (%s): \"%s\" -> \"%s\" | %d | %d bytes",
+                  requestCount, total, targetParamName, fieldName, fieldType, originalValue, injectedValue, statusCode, responseLength));
+              
+              // Send error responses to Organizer (exclude 2xx, 3xx, 401, 402, 403, 404)
+              boolean isRetryableError = statusCode >= 400 && statusCode != 401 && statusCode != 402 && statusCode != 403 && statusCode != 404;
+              if (statusCode >= 400) {
+                  String note = String.format("[SQLi Test] Location: query param '%s' | Field: %s | Type: %s | Original: %s | Injected: %s | Status: %d", 
+                      targetParamName, fieldName, fieldType, originalValue, injectedValue, statusCode);
+                  var reqRespForOrganizer = burp.api.montoya.http.message.HttpRequestResponse.httpRequestResponse(modifiedRequest, response.response());
+                  reqRespForOrganizer.annotations().setNotes(note);
+                  api().organizer().sendToOrganizer(reqRespForOrganizer);
+              }
+              
+              // Retry with double quote if error (400, 5xx but not 401, 402, 403, 404)
+              if (isRetryableError) {
+                  String retryPayload;
+                  String retryModifiedJson;
+                  if (fieldType.startsWith("number")) {
+                      // For number->string', retry with number->string''
+                      if (payload.endsWith("'\"")) {
+                          retryPayload = payload.substring(0, payload.length() - 2) + "''\"";
+                      } else {
+                          retryPayload = payload.substring(0, payload.length() - 1) + "'\"";
+                      }
+                      retryModifiedJson = decodedJson.substring(0, positions[0]) + retryPayload + decodedJson.substring(positions[1]);
+                  } else {
+                      retryPayload = payload + "'";
+                      retryModifiedJson = decodedJson.substring(0, positions[1]) + retryPayload + decodedJson.substring(positions[1]);
+                  }
+                  String retryInjectedValue = fieldType.startsWith("number") ? retryPayload : originalValue + retryPayload;
+                  String retryEncodedJson = utilities().urlUtils().encode(retryModifiedJson);
+                  
+                  StringBuilder retryQueryString = new StringBuilder();
+                  for (int j = 0; j < params.length; j++) {
+                      if (j > 0) retryQueryString.append("&");
+                      if (j == targetParamIndex) {
+                          retryQueryString.append(targetParamName).append("=").append(retryEncodedJson);
+                      } else {
+                          retryQueryString.append(params[j]);
+                      }
+                  }
+                  
+                  String retryPath = pathWithoutQuery + "?" + retryQueryString.toString();
+                  var retryRequest = request.withPath(retryPath);
+                  
+                  logging().logToOutput(String.format("    [RETRY] %s.%s: \"%s\" -> \"%s\"", targetParamName, fieldName, originalValue, retryInjectedValue));
+                  
+                  var retryResponse = api().http().sendRequest(retryRequest, httpVersion);
+                  if (retryResponse.response() != null) {
+                      int retryStatus = retryResponse.response().statusCode();
+                      int retryLength = retryResponse.response().body() == null ? 0 : retryResponse.response().body().length();
+                      logging().logToOutput(String.format("    [RETRY] Result: %d | %d bytes", retryStatus, retryLength));
+                      
+                      // If retry returns 2xx, report SQL injection!
+                      if (retryStatus >= 200 && retryStatus < 300) {
+                          logging().logToOutput("    [!!!] POTENTIAL SQL INJECTION DETECTED!");
+                          var auditIssue = burp.api.montoya.scanner.audit.issues.AuditIssue.auditIssue(
+                              "SQL Injection (Quote Escape)",
+                              String.format("SQL injection detected in query param '%s', field '%s'. Single quote caused error (%d), double quote returned success (%d). Original: %s, Payload: %s", 
+                                  targetParamName, fieldName, statusCode, retryStatus, originalValue, retryInjectedValue),
+                              null,
+                              request.url(),
+                              burp.api.montoya.scanner.audit.issues.AuditIssueSeverity.HIGH,
+                              burp.api.montoya.scanner.audit.issues.AuditIssueConfidence.FIRM,
+                              null,
+                              null,
+                              burp.api.montoya.scanner.audit.issues.AuditIssueSeverity.HIGH,
+                              retryResponse
+                          );
+                          api().siteMap().add(auditIssue);
+                      }
+                  }
+              }
+              
+              httpEditor.responsePane().set(response.response().toByteArray());
+              
+          } catch (Exception e) {
+              logging().logToOutput(String.format("[%d/%d] [query] %s.%s | ERROR: %s",
+                  requestCount, total, targetParamName, fieldName, e.getMessage()));
           }
-          
-          httpEditor.responsePane().set(response.response().toByteArray());
-          
-      } catch (Exception e) {
-          logging().logToOutput(String.format("[%d/%d] %s.%s | ERROR: %s",
-              requestCount, total, targetParamName, fieldName, e.getMessage()));
       }
   }
   
-  logging().logToOutput("\n[*] Completed: " + requestCount + " tests");
+  // Process body JSON
+  if (hasJsonBody) {
+      logging().logToOutput("\n[*] Body JSON: " + (bodyJson.length() > 200 ? bodyJson.substring(0, 200) + "..." : bodyJson));
+      
+      var bodyInjectionPoints = new java.util.ArrayList();
+      
+      // Find "key":"value" patterns (strings)
+      java.util.regex.Pattern pb = java.util.regex.Pattern.compile("\"([^\"]+)\"\\s*:\\s*\"([^\"]*)\"");
+      java.util.regex.Matcher mb = pb.matcher(bodyJson);
+      while (mb.find()) {
+          bodyInjectionPoints.add(new Object[]{new int[]{mb.start(2), mb.end(2)}, mb.group(1), mb.group(2), "'", "string"});
+      }
+      
+      // Find "key":number patterns - test both "num" and "num'"
+      java.util.regex.Pattern pbNum = java.util.regex.Pattern.compile("\"([^\"]+)\"\\s*:\\s*(-?\\d+\\.?\\d*)");
+      java.util.regex.Matcher mbNum = pbNum.matcher(bodyJson);
+      while (mbNum.find()) {
+          int numStart = mbNum.start(2);
+          int numEnd = mbNum.end(2);
+          String numValue = mbNum.group(2);
+          // First test: convert number to string "num"
+          bodyInjectionPoints.add(new Object[]{new int[]{numStart, numEnd}, mbNum.group(1), numValue, "\"" + numValue + "\"", "number->string"});
+          // Second test: convert number to string with quote "num'"
+          bodyInjectionPoints.add(new Object[]{new int[]{numStart, numEnd}, mbNum.group(1), numValue, "\"" + numValue + "'\"", "number->string'"});
+      }
+      
+      // Find empty arrays "key":[]
+      java.util.regex.Pattern pbArray = java.util.regex.Pattern.compile("\"([^\"]+)\"\\s*:\\s*(\\[\\s*\\])");
+      java.util.regex.Matcher mbArray = pbArray.matcher(bodyJson);
+      while (mbArray.find()) {
+          int insertionPoint = mbArray.end(2) - 1;
+          bodyInjectionPoints.add(new Object[]{new int[]{mbArray.start(2), insertionPoint}, mbArray.group(1) + " (empty array)", "[]", "\"bambda'\"", "array"});
+      }
+      
+      // Find strings in arrays
+      java.util.regex.Pattern pbArrayStr = java.util.regex.Pattern.compile("\\[\\s*\"([^\"]*)\"");
+      java.util.regex.Matcher mbArrayStr = pbArrayStr.matcher(bodyJson);
+      while (mbArrayStr.find()) {
+          int valueStart = mbArrayStr.start(1);
+          int valueEnd = mbArrayStr.end(1);
+          boolean isDuplicate = false;
+          for (int i = 0; i < bodyInjectionPoints.size(); i++) {
+              Object[] existing = (Object[]) bodyInjectionPoints.get(i);
+              int[] existingPos = (int[]) existing[0];
+              if (existingPos[0] == valueStart) { isDuplicate = true; break; }
+          }
+          if (!isDuplicate) {
+              bodyInjectionPoints.add(new Object[]{new int[]{valueStart, valueEnd}, "array_item", mbArrayStr.group(1), "'", "string"});
+          }
+      }
+      
+      // Find numbers in arrays - test both "num" and "num'"
+      java.util.regex.Pattern pbArrayNum = java.util.regex.Pattern.compile("\\[\\s*(-?\\d+\\.?\\d*)");
+      java.util.regex.Matcher mbArrayNum = pbArrayNum.matcher(bodyJson);
+      while (mbArrayNum.find()) {
+          int numStart = mbArrayNum.start(1);
+          int numEnd = mbArrayNum.end(1);
+          String numValue = mbArrayNum.group(1);
+          boolean isDuplicate = false;
+          for (int i = 0; i < bodyInjectionPoints.size(); i++) {
+              Object[] existing = (Object[]) bodyInjectionPoints.get(i);
+              int[] existingPos = (int[]) existing[0];
+              if (existingPos[0] == numStart) { isDuplicate = true; break; }
+          }
+          if (!isDuplicate) {
+              bodyInjectionPoints.add(new Object[]{new int[]{numStart, numEnd}, "array_num", numValue, "\"" + numValue + "\"", "number->string"});
+              bodyInjectionPoints.add(new Object[]{new int[]{numStart, numEnd}, "array_num", numValue, "\"" + numValue + "'\"", "number->string'"});
+          }
+      }
+      
+      logging().logToOutput("[*] Found " + bodyInjectionPoints.size() + " fields to test in body\n");
+      
+      int bodyTotal = bodyInjectionPoints.size();
+      for (int i = 0; i < bodyTotal; i++) {
+          Object[] point = (Object[]) bodyInjectionPoints.get(i);
+          int[] positions = (int[]) point[0];
+          String fieldName = (String) point[1];
+          String originalValue = (String) point[2];
+          String payload = (String) point[3];
+          String fieldType = (String) point[4];
+          
+          String modifiedJson;
+          String injectedValue;
+          // For number fields, replace the entire value; for strings, append payload
+          if (fieldType.startsWith("number")) {
+              modifiedJson = bodyJson.substring(0, positions[0]) + payload + bodyJson.substring(positions[1]);
+              injectedValue = payload;
+          } else {
+              modifiedJson = bodyJson.substring(0, positions[1]) + payload + bodyJson.substring(positions[1]);
+              injectedValue = originalValue + payload;
+          }
+          var modifiedRequest = request.withBody(modifiedJson);
+          
+          requestCount++;
+          
+          try {
+              var response = api().http().sendRequest(modifiedRequest, httpVersion);
+              
+              if (response.response() == null) {
+                  logging().logToOutput(String.format("[%d/%d] [body] body.%s (%s): \"%s\" -> \"%s\" | NO RESPONSE",
+                      requestCount, bodyTotal, fieldName, fieldType, originalValue, injectedValue));
+                  continue;
+              }
+              
+              int statusCode = response.response().statusCode();
+              int responseLength = response.response().body() == null ? 0 : response.response().body().length();
+              
+              logging().logToOutput(String.format("[%d/%d] [body] body.%s (%s): \"%s\" -> \"%s\" | %d | %d bytes",
+                  requestCount, bodyTotal, fieldName, fieldType, originalValue, injectedValue, statusCode, responseLength));
+              
+              // Send error responses to Organizer (exclude 2xx, 3xx, 401, 402, 403, 404)
+              boolean isRetryableError = statusCode >= 400 && statusCode != 401 && statusCode != 402 && statusCode != 403 && statusCode != 404;
+              if (statusCode >= 400) {
+                  String note = String.format("[SQLi Test] Location: request body | Field: %s | Type: %s | Original: %s | Injected: %s | Status: %d", 
+                      fieldName, fieldType, originalValue, injectedValue, statusCode);
+                  var reqRespForOrganizer = burp.api.montoya.http.message.HttpRequestResponse.httpRequestResponse(modifiedRequest, response.response());
+                  reqRespForOrganizer.annotations().setNotes(note);
+                  api().organizer().sendToOrganizer(reqRespForOrganizer);
+              }
+              
+              // Retry with double quote if error (400, 5xx but not 401, 402, 403, 404)
+              if (isRetryableError) {
+                  String retryPayload;
+                  String retryModifiedJson;
+                  if (fieldType.startsWith("number")) {
+                      // For number->string', retry with number->string''
+                      if (payload.endsWith("'\"")) {
+                          retryPayload = payload.substring(0, payload.length() - 2) + "''\"";
+                      } else {
+                          retryPayload = payload.substring(0, payload.length() - 1) + "'\"";
+                      }
+                      retryModifiedJson = bodyJson.substring(0, positions[0]) + retryPayload + bodyJson.substring(positions[1]);
+                  } else {
+                      retryPayload = payload + "'";
+                      retryModifiedJson = bodyJson.substring(0, positions[1]) + retryPayload + bodyJson.substring(positions[1]);
+                  }
+                  String retryInjectedValue = fieldType.startsWith("number") ? retryPayload : originalValue + retryPayload;
+                  
+                  var retryRequest = request.withBody(retryModifiedJson);
+                  
+                  logging().logToOutput(String.format("    [RETRY] body.%s: \"%s\" -> \"%s\"", fieldName, originalValue, retryInjectedValue));
+                  
+                  var retryResponse = api().http().sendRequest(retryRequest, httpVersion);
+                  if (retryResponse.response() != null) {
+                      int retryStatus = retryResponse.response().statusCode();
+                      int retryLength = retryResponse.response().body() == null ? 0 : retryResponse.response().body().length();
+                      logging().logToOutput(String.format("    [RETRY] Result: %d | %d bytes", retryStatus, retryLength));
+                      
+                      // If retry returns 2xx, report SQL injection!
+                      if (retryStatus >= 200 && retryStatus < 300) {
+                          logging().logToOutput("    [!!!] POTENTIAL SQL INJECTION DETECTED!");
+                          var auditIssue = burp.api.montoya.scanner.audit.issues.AuditIssue.auditIssue(
+                              "SQL Injection (Quote Escape)",
+                              String.format("SQL injection detected in request body, field '%s'. Single quote caused error (%d), double quote returned success (%d). Original: %s, Payload: %s", 
+                                  fieldName, statusCode, retryStatus, originalValue, retryInjectedValue),
+                              null,
+                              request.url(),
+                              burp.api.montoya.scanner.audit.issues.AuditIssueSeverity.HIGH,
+                              burp.api.montoya.scanner.audit.issues.AuditIssueConfidence.FIRM,
+                              null,
+                              null,
+                              burp.api.montoya.scanner.audit.issues.AuditIssueSeverity.HIGH,
+                              retryResponse
+                          );
+                          api().siteMap().add(auditIssue);
+                      }
+                  }
+              }
+              
+              httpEditor.responsePane().set(response.response().toByteArray());
+              
+          } catch (Exception e) {
+              logging().logToOutput(String.format("[%d/%d] [body] body.%s | ERROR: %s",
+                  requestCount, bodyTotal, fieldName, e.getMessage()));
+          }
+      }
+  }
+  
+  // Process multipart form data with JSON fields
+  if (hasMultipart) {
+      for (int mf = 0; mf < multipartJsonFields.size(); mf++) {
+          Object[] multipartField = (Object[]) multipartJsonFields.get(mf);
+          String mpFieldName = (String) multipartField[0];
+          String mpJson = (String) multipartField[1];
+          int mpJsonStart = (Integer) multipartField[2];
+          int mpJsonEnd = (Integer) multipartField[3];
+          
+          logging().logToOutput("\n[*] Multipart field '" + mpFieldName + "' JSON: " + (mpJson.length() > 200 ? mpJson.substring(0, 200) + "..." : mpJson));
+          
+          var mpInjectionPoints = new java.util.ArrayList();
+          
+          // Find "key":"value" patterns (strings)
+          java.util.regex.Pattern mpP = java.util.regex.Pattern.compile("\"([^\"]+)\"\\s*:\\s*\"([^\"]*)\"");
+          java.util.regex.Matcher mpM = mpP.matcher(mpJson);
+          while (mpM.find()) {
+              mpInjectionPoints.add(new Object[]{new int[]{mpM.start(2), mpM.end(2)}, mpM.group(1), mpM.group(2), "'", "string"});
+          }
+          
+          // Find "key":number patterns
+          java.util.regex.Pattern mpPNum = java.util.regex.Pattern.compile("\"([^\"]+)\"\\s*:\\s*(-?\\d+\\.?\\d*)");
+          java.util.regex.Matcher mpMNum = mpPNum.matcher(mpJson);
+          while (mpMNum.find()) {
+              int numStart = mpMNum.start(2);
+              int numEnd = mpMNum.end(2);
+              String numValue = mpMNum.group(2);
+              mpInjectionPoints.add(new Object[]{new int[]{numStart, numEnd}, mpMNum.group(1), numValue, "\"" + numValue + "\"", "number->string"});
+              mpInjectionPoints.add(new Object[]{new int[]{numStart, numEnd}, mpMNum.group(1), numValue, "\"" + numValue + "'\"", "number->string'"});
+          }
+          
+          // Find strings in arrays
+          java.util.regex.Pattern mpPArrayStr = java.util.regex.Pattern.compile("\\[\\s*\"([^\"]*)\"");
+          java.util.regex.Matcher mpMArrayStr = mpPArrayStr.matcher(mpJson);
+          while (mpMArrayStr.find()) {
+              int valueStart = mpMArrayStr.start(1);
+              int valueEnd = mpMArrayStr.end(1);
+              boolean isDuplicate = false;
+              for (int i = 0; i < mpInjectionPoints.size(); i++) {
+                  Object[] existing = (Object[]) mpInjectionPoints.get(i);
+                  int[] existingPos = (int[]) existing[0];
+                  if (existingPos[0] == valueStart) { isDuplicate = true; break; }
+              }
+              if (!isDuplicate) {
+                  mpInjectionPoints.add(new Object[]{new int[]{valueStart, valueEnd}, "array_item", mpMArrayStr.group(1), "'", "string"});
+              }
+          }
+          
+          logging().logToOutput("[*] Found " + mpInjectionPoints.size() + " field(s) to test in multipart '" + mpFieldName + "'\n");
+          
+          int mpTotal = mpInjectionPoints.size();
+          for (int i = 0; i < mpTotal; i++) {
+              Object[] point = (Object[]) mpInjectionPoints.get(i);
+              int[] positions = (int[]) point[0];
+              String fieldName = (String) point[1];
+              String originalValue = (String) point[2];
+              String payload = (String) point[3];
+              String fieldType = (String) point[4];
+              
+              String modifiedMpJson;
+              String injectedValue;
+              if (fieldType.startsWith("number")) {
+                  modifiedMpJson = mpJson.substring(0, positions[0]) + payload + mpJson.substring(positions[1]);
+                  injectedValue = payload;
+              } else {
+                  modifiedMpJson = mpJson.substring(0, positions[1]) + payload + mpJson.substring(positions[1]);
+                  injectedValue = originalValue + payload;
+              }
+              
+              // Replace JSON in full body
+              String modifiedBody = fullBody.substring(0, mpJsonStart) + modifiedMpJson + fullBody.substring(mpJsonEnd);
+              var modifiedRequest = request.withBody(modifiedBody);
+              
+              requestCount++;
+              
+              try {
+                  var response = api().http().sendRequest(modifiedRequest, httpVersion);
+                  
+                  if (response.response() == null) {
+                      logging().logToOutput(String.format("[%d/%d] [multipart] %s.%s (%s): \"%s\" -> \"%s\" | NO RESPONSE",
+                          requestCount, mpTotal, mpFieldName, fieldName, fieldType, originalValue, injectedValue));
+                      continue;
+                  }
+                  
+                  int statusCode = response.response().statusCode();
+                  int responseLength = response.response().body() == null ? 0 : response.response().body().length();
+                  
+                  logging().logToOutput(String.format("[%d/%d] [multipart] %s.%s (%s): \"%s\" -> \"%s\" | %d | %d bytes",
+                      requestCount, mpTotal, mpFieldName, fieldName, fieldType, originalValue, injectedValue, statusCode, responseLength));
+                  
+                  // Send error responses to Organizer
+                  boolean isRetryableError = statusCode >= 400 && statusCode != 401 && statusCode != 402 && statusCode != 403 && statusCode != 404;
+                  if (statusCode >= 400) {
+                      String note = String.format("[SQLi Test] Location: multipart field '%s' | Field: %s | Type: %s | Original: %s | Injected: %s | Status: %d", 
+                          mpFieldName, fieldName, fieldType, originalValue, injectedValue, statusCode);
+                      var reqRespForOrganizer = burp.api.montoya.http.message.HttpRequestResponse.httpRequestResponse(modifiedRequest, response.response());
+                      reqRespForOrganizer.annotations().setNotes(note);
+                      api().organizer().sendToOrganizer(reqRespForOrganizer);
+                  }
+                  
+                  // Retry with double quote if error
+                  if (isRetryableError) {
+                      String retryPayload;
+                      String retryModifiedMpJson;
+                      if (fieldType.startsWith("number")) {
+                          if (payload.endsWith("'\"")) {
+                              retryPayload = payload.substring(0, payload.length() - 2) + "''\"";
+                          } else {
+                              retryPayload = payload.substring(0, payload.length() - 1) + "'\"";
+                          }
+                          retryModifiedMpJson = mpJson.substring(0, positions[0]) + retryPayload + mpJson.substring(positions[1]);
+                      } else {
+                          retryPayload = payload + "'";
+                          retryModifiedMpJson = mpJson.substring(0, positions[1]) + retryPayload + mpJson.substring(positions[1]);
+                      }
+                      String retryInjectedValue = fieldType.startsWith("number") ? retryPayload : originalValue + retryPayload;
+                      
+                      String retryModifiedBody = fullBody.substring(0, mpJsonStart) + retryModifiedMpJson + fullBody.substring(mpJsonEnd);
+                      var retryRequest = request.withBody(retryModifiedBody);
+                      
+                      logging().logToOutput(String.format("    [RETRY] %s.%s: \"%s\" -> \"%s\"", mpFieldName, fieldName, originalValue, retryInjectedValue));
+                      
+                      var retryResponse = api().http().sendRequest(retryRequest, httpVersion);
+                      if (retryResponse.response() != null) {
+                          int retryStatus = retryResponse.response().statusCode();
+                          int retryLength = retryResponse.response().body() == null ? 0 : retryResponse.response().body().length();
+                          logging().logToOutput(String.format("    [RETRY] Result: %d | %d bytes", retryStatus, retryLength));
+                          
+                          if (retryStatus >= 200 && retryStatus < 300) {
+                              logging().logToOutput("    [!!!] POTENTIAL SQL INJECTION DETECTED!");
+                              var auditIssue = burp.api.montoya.scanner.audit.issues.AuditIssue.auditIssue(
+                                  "SQL Injection (Quote Escape)",
+                                  String.format("SQL injection detected in multipart field '%s', JSON field '%s'. Single quote caused error (%d), double quote returned success (%d). Original: %s, Payload: %s", 
+                                      mpFieldName, fieldName, statusCode, retryStatus, originalValue, retryInjectedValue),
+                                  null,
+                                  request.url(),
+                                  burp.api.montoya.scanner.audit.issues.AuditIssueSeverity.HIGH,
+                                  burp.api.montoya.scanner.audit.issues.AuditIssueConfidence.FIRM,
+                                  null,
+                                  null,
+                                  burp.api.montoya.scanner.audit.issues.AuditIssueSeverity.HIGH,
+                                  retryResponse
+                              );
+                              api().siteMap().add(auditIssue);
+                          }
+                      }
+                  }
+                  
+                  httpEditor.responsePane().set(response.response().toByteArray());
+                  
+              } catch (Exception e) {
+                  logging().logToOutput(String.format("[%d/%d] [multipart] %s.%s | ERROR: %s",
+                      requestCount, mpTotal, mpFieldName, fieldName, e.getMessage()));
+              }
+          }
+      }
+  }
+  
+  logging().logToOutput("\n[*] Completed: " + requestCount + " total tests");
+

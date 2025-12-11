@@ -9,7 +9,7 @@ source: |+
    * 
    * Useful for SQL injection testing.
    *
-   * @author quan.m.le
+   * @author insomnia1102
    **/
   
   var request = requestResponse.request();
