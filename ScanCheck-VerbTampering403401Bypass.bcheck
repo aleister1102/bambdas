@@ -1,0 +1,80 @@
+# HTTP Verb/Method Tampering 401/403 Bypass Scanner
+# Based on techniques from nomore403 and BypassFuzzer
+# Author: Combined from devploit/nomore403 and intrudir/BypassFuzzer
+
+metadata:
+    language: v2-beta
+    name: "HTTP Verb Tampering 401/403 Bypass"
+    description: "Attempts to bypass 401/403 using HTTP method/verb tampering and case switching"
+    author: "Combined (nomore403 + BypassFuzzer)"
+    tags: "bypass", "403", "401", "verb", "method", "active"
+
+define:
+    desc = "Potential 401/403 bypass via HTTP method tampering"
+    reme = "Implement access controls that apply to all HTTP methods consistently."
+
+# ============================================================================
+# HTTP Method/Verb Tampering
+# ============================================================================
+run for each:
+    http_method =
+        "GET",
+        "HEAD",
+        "POST",
+        "PUT",
+        "DELETE",
+        "PATCH",
+        "OPTIONS",
+        "TRACE",
+        "CONNECT",
+        "PROPFIND",
+        "PROPPATCH",
+        "MKCOL",
+        "COPY",
+        "MOVE",
+        "LOCK",
+        "UNLOCK",
+        "VERSION-CONTROL",
+        "REPORT",
+        "CHECKOUT",
+        "CHECKIN",
+        "UNCHECKOUT",
+        "MKWORKSPACE",
+        "UPDATE",
+        "LABEL",
+        "MERGE",
+        "BASELINE-CONTROL",
+        "MKACTIVITY",
+        "ORDERPATCH",
+        "ACL",
+        "SEARCH",
+        "ARBITRARY",
+        "POUET",
+        "FOOBAR",
+        "CATS",
+        "GeT",
+        "gEt",
+        "gET",
+        "GEt",
+        "Get",
+        "geT",
+        "PoSt",
+        "pOsT",
+        "pOST",
+        "POsT",
+        "POSt",
+        "PosT"
+
+given request then
+    if {base.response.status_code} matches "(401|403)" then
+        send request:
+            method: {http_method}
+
+        if {latest.response.status_code} matches "^[23]" then
+            report issue:
+                severity: high
+                confidence: tentative
+                detail: `{desc}. Method: {http_method}. Original status: {base.response.status_code}, Bypass status: {latest.response.status_code}`
+                remediation: {reme}
+        end if
+    end if

@@ -1,0 +1,45 @@
+# 401/403 Bypass - Path Suffix Manipulation
+# Tests bypass by appending various suffixes to the path
+
+metadata:
+    language: v2-beta
+    name: "403/401 Bypass - Path Suffix"
+    description: "Attempts to bypass 401/403 using path suffix manipulation"
+    author: "Combined (nomore403 + BypassFuzzer)"
+    tags: "bypass", "403", "401", "path-manipulation", "active"
+
+define:
+    desc = "Potential 401/403 bypass via path suffix manipulation"
+    reme = "Normalize paths before access control checks"
+
+run for each:
+    path_suffix =
+        "/",
+        "//",
+        "/.",
+        "/./",
+        "/.;/",
+        "/..;/",
+        "/%2e/",
+        "/%2e%2e/",
+        "/;/",
+        "/?",
+        "/#",
+        ".json",
+        ".html",
+        "%00",
+        "%20"
+
+given request then
+    if {base.response.status_code} matches "(401|403)" then
+        send request:
+            appending to path: {path_suffix}
+
+        if {latest.response.status_code} matches "^[23]" then
+            report issue:
+                severity: high
+                confidence: tentative
+                detail: `{desc}. Suffix: {path_suffix}. Status: {base.response.status_code} -> {latest.response.status_code}`
+                remediation: {reme}
+        end if
+    end if

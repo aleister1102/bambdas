@@ -1,0 +1,39 @@
+# 401/403 Bypass - Path Prefix Manipulation
+# Tests bypass by prepending various prefixes to the path
+
+metadata:
+    language: v2-beta
+    name: "403/401 Bypass - Path Prefix"
+    description: "Attempts to bypass 401/403 using path prefix manipulation"
+    author: "Combined (nomore403 + BypassFuzzer)"
+    tags: "bypass", "403", "401", "path-manipulation", "active"
+
+define:
+    desc = "Potential 401/403 bypass via path prefix manipulation"
+    reme = "Normalize paths before access control checks"
+
+run for each:
+    path_prefix =
+        "/;/",
+        "//;/",
+        "/.;/",
+        "/..;/",
+        "/%2e/",
+        "/%2e%2e/",
+        "//",
+        "///",
+        "%2f"
+
+given request then
+    if {base.response.status_code} matches "(401|403)" then
+        send request:
+            replacing path: `{path_prefix}{base.request.url.path}`
+
+        if {latest.response.status_code} matches "^[23]" then
+            report issue:
+                severity: high
+                confidence: tentative
+                detail: `{desc}. Prefix: {path_prefix}. Status: {base.response.status_code} -> {latest.response.status_code}`
+                remediation: {reme}
+        end if
+    end if

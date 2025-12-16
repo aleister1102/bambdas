@@ -1,0 +1,39 @@
+# 401/403 Bypass - URL Override Headers
+# Tests bypass using X-Original-URL, X-Rewrite-URL, and similar headers
+
+metadata:
+    language: v2-beta
+    name: "403/401 Bypass - URL Override"
+    description: "Attempts to bypass 401/403 using URL override headers"
+    author: "Combined (nomore403 + BypassFuzzer)"
+    tags: "bypass", "403", "401", "url-override", "active"
+
+define:
+    desc = "Potential 401/403 bypass via URL override header"
+    reme = "Ensure URL override headers are not trusted for access control decisions"
+
+run for each:
+    override_header =
+        "X-Original-URL",
+        "X-Rewrite-URL",
+        "X-Override-URL",
+        "X-Proxy-URL",
+        "X-HTTP-DestinationURL",
+        "Request-Uri",
+        "X-Request-Uri"
+
+given request then
+    if {base.response.status_code} matches "(401|403)" then
+        send request:
+            replacing path: "/"
+            replacing headers:
+                {override_header}: {base.request.url.path}
+
+        if {latest.response.status_code} matches "^[23]" then
+            report issue:
+                severity: high
+                confidence: tentative
+                detail: `{desc}. Header: {override_header}. Status: {base.response.status_code} -> {latest.response.status_code}`
+                remediation: {reme}
+        end if
+    end if

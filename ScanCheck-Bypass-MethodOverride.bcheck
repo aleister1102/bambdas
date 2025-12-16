@@ -1,0 +1,32 @@
+# 401/403 Bypass - Method Override Headers
+# Tests bypass using X-HTTP-Method-Override and similar headers
+
+metadata:
+    language: v2-beta
+    name: "403/401 Bypass - Method Override"
+    description: "Attempts to bypass 401/403 using HTTP method override headers"
+    author: "Combined (nomore403 + BypassFuzzer)"
+    tags: "bypass", "403", "401", "method-override", "active"
+
+define:
+    desc = "Potential 401/403 bypass via method override header"
+    reme = "Ensure method override headers are properly validated"
+
+run for each:
+    override_method = "GET", "POST", "PUT", "DELETE", "PATCH"
+    override_header = "X-HTTP-Method-Override", "X-HTTP-Method", "X-Method-Override"
+
+given request then
+    if {base.response.status_code} matches "(401|403)" then
+        send request:
+            replacing headers:
+                {override_header}: {override_method}
+
+        if {latest.response.status_code} matches "^[23]" then
+            report issue:
+                severity: high
+                confidence: tentative
+                detail: `{desc}. Header: {override_header}: {override_method}. Status: {base.response.status_code} -> {latest.response.status_code}`
+                remediation: {reme}
+        end if
+    end if

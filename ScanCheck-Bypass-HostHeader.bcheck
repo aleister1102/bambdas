@@ -1,0 +1,38 @@
+# 401/403 Bypass - Host Header Manipulation
+# Tests bypass by modifying the Host header
+
+metadata:
+    language: v2-beta
+    name: "403/401 Bypass - Host Header"
+    description: "Attempts to bypass 401/403 using Host header manipulation"
+    author: "Combined (nomore403 + BypassFuzzer)"
+    tags: "bypass", "403", "401", "host-header", "active"
+
+define:
+    desc = "Potential 401/403 bypass via Host header manipulation"
+    reme = "Ensure access control is not based on Host header value"
+
+run for each:
+    host_value =
+        "localhost",
+        "localhost:80",
+        "localhost:443",
+        "127.0.0.1",
+        "127.0.0.1:80",
+        "0.0.0.0",
+        "::1"
+
+given request then
+    if {base.response.status_code} matches "(401|403)" then
+        send request:
+            replacing headers:
+                Host: {host_value}
+
+        if {latest.response.status_code} matches "^[23]" then
+            report issue:
+                severity: high
+                confidence: tentative
+                detail: `{desc}. Host: {host_value}. Status: {base.response.status_code} -> {latest.response.status_code}`
+                remediation: {reme}
+        end if
+    end if

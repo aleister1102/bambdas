@@ -1,0 +1,40 @@
+# 401/403 Bypass - HTTP Verb Tampering
+# Tests bypass using different HTTP methods
+
+metadata:
+    language: v2-beta
+    name: "403/401 Bypass - Verb Tampering"
+    description: "Attempts to bypass 401/403 using HTTP verb/method tampering"
+    author: "Combined (nomore403 + BypassFuzzer)"
+    tags: "bypass", "403", "401", "verb-tampering", "active"
+
+define:
+    desc = "Potential 401/403 bypass via HTTP verb tampering"
+    reme = "Ensure access control is enforced consistently across all HTTP methods"
+
+run for each:
+    http_method =
+        "GET",
+        "HEAD",
+        "POST",
+        "PUT",
+        "DELETE",
+        "PATCH",
+        "OPTIONS",
+        "TRACE",
+        "PROPFIND",
+        "ARBITRARY"
+
+given request then
+    if {base.response.status_code} matches "(401|403)" then
+        send request:
+            replacing method: {http_method}
+
+        if {latest.response.status_code} matches "^[23]" then
+            report issue:
+                severity: high
+                confidence: tentative
+                detail: `{desc}. Method: {http_method}. Status: {base.response.status_code} -> {latest.response.status_code}`
+                remediation: {reme}
+        end if
+    end if

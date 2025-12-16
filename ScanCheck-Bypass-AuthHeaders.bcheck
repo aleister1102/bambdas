@@ -1,0 +1,41 @@
+# 401/403 Bypass - Authentication Headers
+# Tests bypass using various auth-related headers
+
+metadata:
+    language: v2-beta
+    name: "403/401 Bypass - Auth Headers"
+    description: "Attempts to bypass 401/403 using authentication headers"
+    author: "Combined (nomore403 + BypassFuzzer)"
+    tags: "bypass", "403", "401", "auth-header", "active"
+
+define:
+    desc = "Potential 401/403 bypass via authentication header"
+    reme = "Ensure authentication headers are properly validated"
+
+run for each:
+    auth_header =
+        "Authorization",
+        "Php-Auth-User",
+        "X-Auth-Token",
+        "X-API-Key"
+
+    auth_value =
+        "Basic YWRtaW46YWRtaW4=",
+        "Bearer ",
+        "admin",
+        "null"
+
+given request then
+    if {base.response.status_code} matches "(401|403)" then
+        send request:
+            replacing headers:
+                {auth_header}: {auth_value}
+
+        if {latest.response.status_code} matches "^[23]" then
+            report issue:
+                severity: high
+                confidence: tentative
+                detail: `{desc}. Header: {auth_header}: {auth_value}. Status: {base.response.status_code} -> {latest.response.status_code}`
+                remediation: {reme}
+        end if
+    end if
