@@ -1,5 +1,5 @@
 id: 2ffec23a-5012-44fb-9b41-cd453218f88a
-name: Add Quote to All Params
+name: Fuzz With Quote In All Params
 function: CUSTOM_ACTION
 location: REPEATER
 source: |+

@@ -1,0 +1,180 @@
+id: c1d2e3f4-a5b6-47c8-d9e0-f1a2b3c4d5e6
+name: JSON to XML
+function: CUSTOM_ACTION
+location: REPEATER
+source: |+
+  /**
+   * Converts JSON request body to XML format.
+   * Updates Content-Type header to application/xml.
+   *
+   * @author assistant
+   **/
+
+  var request = requestResponse.request();
+
+  if (request.body() == null || request.body().length() == 0) {
+      logging().logToOutput("[!] No request body found");
+      return;
+  }
+
+  String bodyStr = request.bodyToString().trim();
+
+  if (!bodyStr.startsWith("{") && !bodyStr.startsWith("[")) {
+      logging().logToOutput("[!] Request body is not JSON");
+      return;
+  }
+
+  // Simple JSON to XML converter
+  java.util.function.Function<String, String> jsonToXml = (json) -> {
+      StringBuilder xml = new StringBuilder();
+      xml.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+
+      java.util.Stack<String> tagStack = new java.util.Stack<>();
+      int i = 0;
+      boolean inString = false;
+      StringBuilder currentKey = new StringBuilder();
+      StringBuilder currentValue = new StringBuilder();
+      boolean readingKey = false;
+      boolean readingValue = false;
+      int arrayIndex = 0;
+
+      while (i < json.length()) {
+          char c = json.charAt(i);
+
+          if (c == '"' && (i == 0 || json.charAt(i - 1) != '\\')) {
+              if (!inString) {
+                  inString = true;
+                  if (!readingValue) {
+                      readingKey = true;
+                      currentKey.setLength(0);
+                  }
+              } else {
+                  inString = false;
+                  readingKey = false;
+              }
+              i++;
+              continue;
+          }
+
+          if (inString) {
+              if (readingKey) {
+                  currentKey.append(c);
+              } else if (readingValue) {
+                  currentValue.append(c);
+              }
+              i++;
+              continue;
+          }
+
+          if (c == ':') {
+              readingValue = true;
+              currentValue.setLength(0);
+              i++;
+              continue;
+          }
+
+          if (c == '{') {
+              if (currentKey.length() > 0) {
+                  String tag = currentKey.toString().replaceAll("[^a-zA-Z0-9_]", "_");
+                  xml.append("<").append(tag).append(">\n");
+                  tagStack.push(tag);
+                  currentKey.setLength(0);
+              } else if (tagStack.isEmpty()) {
+                  xml.append("<root>\n");
+                  tagStack.push("root");
+              } else {
+                  xml.append("<item>\n");
+                  tagStack.push("item");
+              }
+              readingValue = false;
+              i++;
+              continue;
+          }
+
+          if (c == '}') {
+              if (readingValue && currentValue.length() > 0) {
+                  String tag = currentKey.toString().replaceAll("[^a-zA-Z0-9_]", "_");
+                  String val = currentValue.toString().trim();
+                  xml.append("<").append(tag).append(">").append(escapeXml(val)).append("</").append(tag).append(">\n");
+                  currentKey.setLength(0);
+                  currentValue.setLength(0);
+                  readingValue = false;
+              }
+              if (!tagStack.isEmpty()) {
+                  xml.append("</").append(tagStack.pop()).append(">\n");
+              }
+              i++;
+              continue;
+          }
+
+          if (c == '[') {
+              String tag = currentKey.length() > 0 ? currentKey.toString().replaceAll("[^a-zA-Z0-9_]", "_") : "array";
+              xml.append("<").append(tag).append(">\n");
+              tagStack.push(tag);
+              currentKey.setLength(0);
+              readingValue = false;
+              arrayIndex = 0;
+              i++;
+              continue;
+          }
+
+          if (c == ']') {
+              if (readingValue && currentValue.length() > 0) {
+                  String val = currentValue.toString().trim();
+                  xml.append("<item>").append(escapeXml(val)).append("</item>\n");
+                  currentValue.setLength(0);
+                  readingValue = false;
+              }
+              if (!tagStack.isEmpty()) {
+                  xml.append("</").append(tagStack.pop()).append(">\n");
+              }
+              i++;
+              continue;
+          }
+
+          if (c == ',') {
+              if (readingValue && currentValue.length() > 0) {
+                  String val = currentValue.toString().trim();
+                  if (currentKey.length() > 0) {
+                      String tag = currentKey.toString().replaceAll("[^a-zA-Z0-9_]", "_");
+                      xml.append("<").append(tag).append(">").append(escapeXml(val)).append("</").append(tag).append(">\n");
+                  } else {
+                      xml.append("<item>").append(escapeXml(val)).append("</item>\n");
+                  }
+                  currentKey.setLength(0);
+                  currentValue.setLength(0);
+              }
+              readingValue = false;
+              i++;
+              continue;
+          }
+
+          if (readingValue && !Character.isWhitespace(c)) {
+              currentValue.append(c);
+          }
+
+          i++;
+      }
+
+      return xml.toString();
+  };
+
+  // Helper to escape XML special characters
+  String escapeXml(String s) {
+      return s.replace("&", "&amp;")
+              .replace("<", "&lt;")
+              .replace(">", "&gt;")
+              .replace("\"", "&quot;")
+              .replace("'", "&apos;");
+  }
+
+  try {
+      String xmlBody = jsonToXml.apply(bodyStr);
+      request = request.withBody(xmlBody);
+      request = request.withUpdatedHeader("Content-Type", "application/xml");
+      httpEditor.requestPane().set(request.toByteArray());
+      logging().logToOutput("[+] Converted JSON to XML");
+  } catch (Exception e) {
+      logging().logToError("[!] Failed to convert: " + e.getMessage());
+  }
+

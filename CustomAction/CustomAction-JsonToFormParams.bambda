@@ -1,0 +1,142 @@
+id: c4d5e6f7-d8e9-4af1-a2b3-c4d5e6f7a8b9
+name: JSON to Form Params
+function: CUSTOM_ACTION
+location: REPEATER
+source: |+
+  /**
+   * Converts JSON request body to URL-encoded form parameters.
+   * Updates Content-Type header to application/x-www-form-urlencoded.
+   * Only works with flat JSON objects (no nested objects/arrays).
+   *
+   * @author assistant
+   **/
+
+  var request = requestResponse.request();
+
+  if (request.body() == null || request.body().length() == 0) {
+      logging().logToOutput("[!] No request body found");
+      return;
+  }
+
+  String bodyStr = request.bodyToString().trim();
+
+  if (!bodyStr.startsWith("{")) {
+      logging().logToOutput("[!] Request body is not a JSON object");
+      return;
+  }
+
+  try {
+      StringBuilder formParams = new StringBuilder();
+      boolean first = true;
+
+      // Simple JSON parser for flat objects
+      int i = 1; // Skip opening brace
+      while (i < bodyStr.length()) {
+          // Skip whitespace
+          while (i < bodyStr.length() && Character.isWhitespace(bodyStr.charAt(i))) {
+              i++;
+          }
+          if (i >= bodyStr.length() || bodyStr.charAt(i) == '}') break;
+
+          // Skip comma
+          if (bodyStr.charAt(i) == ',') {
+              i++;
+              continue;
+          }
+
+          // Read key
+          if (bodyStr.charAt(i) != '"') {
+              i++;
+              continue;
+          }
+          i++; // Skip opening quote
+
+          StringBuilder key = new StringBuilder();
+          while (i < bodyStr.length() && bodyStr.charAt(i) != '"') {
+              if (bodyStr.charAt(i) == '\\' && i + 1 < bodyStr.length()) {
+                  i++;
+                  key.append(bodyStr.charAt(i));
+              } else {
+                  key.append(bodyStr.charAt(i));
+              }
+              i++;
+          }
+          i++; // Skip closing quote
+
+          // Skip colon and whitespace
+          while (i < bodyStr.length() && (bodyStr.charAt(i) == ':' || Character.isWhitespace(bodyStr.charAt(i)))) {
+              i++;
+          }
+
+          // Read value
+          StringBuilder value = new StringBuilder();
+          if (i < bodyStr.length()) {
+              char c = bodyStr.charAt(i);
+
+              if (c == '"') {
+                  // String value
+                  i++;
+                  while (i < bodyStr.length() && bodyStr.charAt(i) != '"') {
+                      if (bodyStr.charAt(i) == '\\' && i + 1 < bodyStr.length()) {
+                          i++;
+                          char escaped = bodyStr.charAt(i);
+                          if (escaped == 'n') value.append('\n');
+                          else if (escaped == 'r') value.append('\r');
+                          else if (escaped == 't') value.append('\t');
+                          else value.append(escaped);
+                      } else {
+                          value.append(bodyStr.charAt(i));
+                      }
+                      i++;
+                  }
+                  i++; // Skip closing quote
+              } else if (c == '{' || c == '[') {
+                  // Nested object/array - stringify it
+                  int depth = 1;
+                  value.append(c);
+                  i++;
+                  while (i < bodyStr.length() && depth > 0) {
+                      c = bodyStr.charAt(i);
+                      if (c == '{' || c == '[') depth++;
+                      else if (c == '}' || c == ']') depth--;
+                      if (depth > 0) value.append(c);
+                      else value.append(c);
+                      i++;
+                  }
+              } else if (c == 'n' && bodyStr.substring(i).startsWith("null")) {
+                  value.append("");
+                  i += 4;
+              } else if (c == 't' && bodyStr.substring(i).startsWith("true")) {
+                  value.append("true");
+                  i += 4;
+              } else if (c == 'f' && bodyStr.substring(i).startsWith("false")) {
+                  value.append("false");
+                  i += 5;
+              } else {
+                  // Number
+                  while (i < bodyStr.length() && !Character.isWhitespace(bodyStr.charAt(i)) 
+                         && bodyStr.charAt(i) != ',' && bodyStr.charAt(i) != '}') {
+                      value.append(bodyStr.charAt(i));
+                      i++;
+                  }
+              }
+          }
+
+          if (!first) {
+              formParams.append("&");
+          }
+          first = false;
+
+          formParams.append(utilities().urlUtils().encode(key.toString()));
+          formParams.append("=");
+          formParams.append(utilities().urlUtils().encode(value.toString()));
+      }
+
+      request = request.withBody(formParams.toString());
+      request = request.withUpdatedHeader("Content-Type", "application/x-www-form-urlencoded");
+      httpEditor.requestPane().set(request.toByteArray());
+      logging().logToOutput("[+] Converted JSON to form params");
+  } catch (Exception e) {
+      logging().logToError("[!] Failed to convert: " + e.getMessage());
+  }
+

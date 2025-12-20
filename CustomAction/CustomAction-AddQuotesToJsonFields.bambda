@@ -1,0 +1,268 @@
+id: a1b2c3d4-e5f6-47a8-b9c0-d1e2f3a4b5c6
+name: Add Quotes to JSON Fields
+function: CUSTOM_ACTION
+location: REPEATER
+source: |+
+  /**
+   * Adds single quotes to all JSON string and number fields in:
+   * - Query parameters
+   * - Request body (direct JSON)
+   * - Multipart form fields containing JSON
+   *
+   * Modifies the request in-place in the Repeater message editor.
+   * Useful for quick SQL injection testing without sending requests.
+   *
+   * @author assistant
+   **/
+
+  var request = requestResponse.request();
+  var modified = false;
+
+  // Define the JSON quote-adding function
+  java.util.function.Function<String, String> addQuotesToJson = (json) -> {
+      StringBuilder result = new StringBuilder();
+      int i = 0;
+
+      while (i < json.length()) {
+          char c = json.charAt(i);
+
+          if (c == '{' || c == '}' || c == '[' || c == ']') {
+              result.append(c);
+              i++;
+              continue;
+          }
+
+          // Handle strings
+          if (c == '"') {
+              result.append(c);
+              i++;
+
+              // Read the string content
+              while (i < json.length()) {
+                  c = json.charAt(i);
+                  if (c == '\\' && i + 1 < json.length()) {
+                      result.append(c);
+                      i++;
+                      result.append(json.charAt(i));
+                      i++;
+                      continue;
+                  }
+                  if (c == '"') {
+                      break;
+                  }
+                  result.append(c);
+                  i++;
+              }
+
+              // Now at closing quote
+              if (i < json.length() && json.charAt(i) == '"') {
+                  // Look ahead to see if this is a key (followed by :)
+                  int j = i + 1;
+                  while (j < json.length() && Character.isWhitespace(json.charAt(j))) {
+                      j++;
+                  }
+
+                  if (j < json.length() && json.charAt(j) == ':') {
+                      // This is a key, just close it normally
+                      result.append('"');
+                      i++;
+                  } else {
+                      // This is a value - add quote before closing
+                      result.append("'\"");
+                      i++;
+                  }
+              }
+              continue;
+          }
+
+          // Handle numbers (could be values)
+          if ((c >= '0' && c <= '9') || (c == '-' && i + 1 < json.length() && json.charAt(i + 1) >= '0' && json.charAt(i + 1) <= '9')) {
+              // Look back to see if this follows a colon (is a value)
+              int j = result.length() - 1;
+              while (j >= 0 && Character.isWhitespace(result.charAt(j))) {
+                  j--;
+              }
+
+              if (j >= 0 && (result.charAt(j) == ':' || result.charAt(j) == ',' || result.charAt(j) == '[')) {
+                  // This is a numeric value - wrap it as string with quote
+                  result.append('"');
+                  while (i < json.length()) {
+                      c = json.charAt(i);
+                      if ((c >= '0' && c <= '9') || c == '.' || c == '-' || c == '+' || c == 'e' || c == 'E') {
+                          result.append(c);
+                          i++;
+                      } else {
+                          break;
+                      }
+                  }
+                  result.append("'\"");
+                  continue;
+              }
+          }
+
+          result.append(c);
+          i++;
+      }
+
+      return result.toString();
+  };
+
+  // Process query parameters for JSON
+  String fullPath = request.path();
+  int queryStart = fullPath.indexOf("?");
+  String pathWithoutQuery = queryStart == -1 ? fullPath : fullPath.substring(0, queryStart);
+  String queryString = queryStart == -1 ? "" : fullPath.substring(queryStart + 1);
+
+  if (!queryString.isEmpty()) {
+      String[] params = queryString.split("&");
+      for (int i = 0; i < params.length; i++) {
+          String param = params[i];
+          int eqIndex = param.indexOf("=");
+          if (eqIndex > 0) {
+              String paramName = param.substring(0, eqIndex);
+              String value = param.substring(eqIndex + 1);
+              String decodedValue = utilities().urlUtils().decode(value);
+
+              if (decodedValue.startsWith("{") || decodedValue.startsWith("[")) {
+                  String modifiedJson = addQuotesToJson.apply(decodedValue);
+                  if (!modifiedJson.equals(decodedValue)) {
+                      String encodedJson = utilities().urlUtils().encode(modifiedJson);
+                      params[i] = paramName + "=" + encodedJson;
+                      modified = true;
+                  }
+              }
+          }
+      }
+
+      if (modified) {
+          String newQueryString = java.lang.String.join("&", params);
+          String newPath = pathWithoutQuery + "?" + newQueryString;
+          request = request.withPath(newPath);
+      }
+  }
+
+  // Process request body
+  if (request.body() != null && request.body().length() > 0) {
+      String bodyStr = request.bodyToString();
+      String contentType = "";
+      var ctHeader = request.header("Content-Type");
+      if (ctHeader != null) {
+          contentType = ctHeader.value();
+      }
+
+      // Check if multipart
+      if (contentType.contains("multipart/form-data")) {
+          String boundary = null;
+          int boundaryIdx = contentType.indexOf("boundary=");
+          if (boundaryIdx != -1) {
+              boundary = contentType.substring(boundaryIdx + 9);
+              if (boundary.startsWith("\"") && boundary.endsWith("\"")) {
+                  boundary = boundary.substring(1, boundary.length() - 1);
+              }
+              int semiIdx = boundary.indexOf(";");
+              if (semiIdx != -1) {
+                  boundary = boundary.substring(0, semiIdx);
+              }
+          }
+
+          if (boundary != null) {
+              String fullBoundary = "--" + boundary;
+              String[] parts = bodyStr.split(fullBoundary);
+              StringBuilder newBody = new StringBuilder();
+
+              for (int p = 0; p < parts.length; p++) {
+                  String part = parts[p];
+
+                  if (p > 0) {
+                      newBody.append(fullBoundary);
+                  }
+
+                  if (part.isEmpty() || part.equals("--") || part.equals("--\r\n")) {
+                      newBody.append(part);
+                      continue;
+                  }
+
+                  int headerEnd = part.indexOf("\r\n\r\n");
+                  if (headerEnd == -1) {
+                      newBody.append(part);
+                      continue;
+                  }
+
+                  String partHeaders = part.substring(0, headerEnd);
+                  String partBody = part.substring(headerEnd + 4);
+
+                  boolean isFile = partHeaders.contains("filename=");
+                  String trimmedBody = partBody.trim();
+
+                  if (trimmedBody.endsWith("\r\n")) {
+                      trimmedBody = trimmedBody.substring(0, trimmedBody.length() - 2);
+                  }
+
+                  if (!isFile && (trimmedBody.startsWith("{") || trimmedBody.startsWith("["))) {
+                      logging().logToOutput("[*] Found JSON in multipart field");
+                      String modifiedJson = addQuotesToJson.apply(trimmedBody);
+                      if (!modifiedJson.equals(trimmedBody)) {
+                          newBody.append(partHeaders);
+                          newBody.append("\r\n\r\n");
+                          newBody.append(modifiedJson);
+                          if (partBody.endsWith("\r\n")) {
+                              newBody.append("\r\n");
+                          }
+                          modified = true;
+                          logging().logToOutput("[+] Modified JSON in multipart field");
+                          continue;
+                      }
+                  }
+
+                  newBody.append(part);
+              }
+
+              if (modified) {
+                  request = request.withBody(newBody.toString());
+              }
+          }
+      }
+      // Direct JSON body
+      else if (bodyStr.trim().startsWith("{") || bodyStr.trim().startsWith("[")) {
+          String modifiedBody = addQuotesToJson.apply(bodyStr.trim());
+          if (!modifiedBody.equals(bodyStr.trim())) {
+              request = request.withBody(modifiedBody);
+              modified = true;
+          }
+      }
+      // URL-encoded body with JSON values
+      else if (contentType.contains("application/x-www-form-urlencoded")) {
+          String[] params = bodyStr.split("&");
+          boolean bodyModified = false;
+          for (int i = 0; i < params.length; i++) {
+              String param = params[i];
+              int eqIndex = param.indexOf("=");
+              if (eqIndex > 0) {
+                  String paramName = param.substring(0, eqIndex);
+                  String value = param.substring(eqIndex + 1);
+                  String decodedValue = utilities().urlUtils().decode(value);
+
+                  if (decodedValue.startsWith("{") || decodedValue.startsWith("[")) {
+                      String modifiedJson = addQuotesToJson.apply(decodedValue);
+                      if (!modifiedJson.equals(decodedValue)) {
+                          String encodedJson = utilities().urlUtils().encode(modifiedJson);
+                          params[i] = paramName + "=" + encodedJson;
+                          bodyModified = true;
+                      }
+                  }
+              }
+          }
+          if (bodyModified) {
+              request = request.withBody(java.lang.String.join("&", params));
+              modified = true;
+          }
+      }
+  }
+
+  if (modified) {
+      httpEditor.requestPane().set(request.toByteArray());
+      logging().logToOutput("[+] Added quotes to JSON fields");
+  } else {
+      logging().logToOutput("[!] No JSON found or no modifications needed");
+  }
+

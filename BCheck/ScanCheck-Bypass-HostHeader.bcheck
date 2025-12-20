@@ -26,7 +26,7 @@ given request then
     if {base.response.status_code} matches "(401|403)" then
         send request:
             replacing headers:
-                Host: {host_value}
+                "Host": {host_value}
 
         if {latest.response.status_code} matches "^[23]" then
             report issue:

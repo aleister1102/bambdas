@@ -1,0 +1,145 @@
+id: b8c9d0e1-2f3a-4b5c-6d7e-8f9a0b1c2d3e
+name: DOM XSS Patterns
+function: CUSTOM_COLUMN
+location: PROXY_HTTP_HISTORY
+source: |+
+    /**
+     * Detects dangerous DOM sinks and sources in responses
+     * Shows count in column, details in notes
+     * @author Bambda Scanner
+     **/
+
+    if (!requestResponse.hasResponse()) return "";
+
+    var response = requestResponse.response();
+    String contentType = "";
+    var ctHeader = response.headerValue("Content-Type");
+    if (ctHeader != null) contentType = ctHeader.toLowerCase();
+
+    // Only scan HTML/JS content
+    if (!contentType.contains("html") && !contentType.contains("javascript")) {
+        return "";
+    }
+
+    String body = response.bodyToString();
+    String url = requestResponse.request().url();
+
+    // Skip bundled/minified JS
+    if (contentType.contains("javascript")) {
+        if (body.contains("webpackJsonp") || body.contains("__webpack_require__") ||
+            url.contains(".min.js") || url.contains(".bundle.js") ||
+            url.contains("vendor.js") || url.contains("/dist/")) {
+            return "";
+        }
+    }
+
+    var sinkFindings = new java.util.ArrayList<String>();
+    var sourceFindings = new java.util.ArrayList<String>();
+
+    // --- DANGEROUS SINKS ---
+    var sinks = new java.util.LinkedHashMap<String, String[]>();
+    sinks.put("innerHTML", new String[]{"\\.innerHTML\\s*=", "\\.innerHTML\\s*\\+="});
+    sinks.put("outerHTML", new String[]{"\\.outerHTML\\s*="});
+    sinks.put("document.write", new String[]{"document\\.write\\s*\\(", "document\\.writeln\\s*\\("});
+    sinks.put("eval", new String[]{"[^a-zA-Z]eval\\s*\\(", "^eval\\s*\\("});
+    sinks.put("location=", new String[]{"location\\s*=(?!\\s*['\"]https?://)", "location\\.href\\s*=", "location\\.replace\\s*\\(", "location\\.assign\\s*\\("});
+    sinks.put("insertAdjacentHTML", new String[]{"\\.insertAdjacentHTML\\s*\\("});
+    sinks.put("$.html()", new String[]{"\\.html\\s*\\([^)]+\\)"});
+    sinks.put("javascript:", new String[]{"href\\s*=\\s*['\"]javascript:", "src\\s*=\\s*['\"]javascript:"});
+
+    // --- DANGEROUS SOURCES ---
+    var sources = new java.util.LinkedHashMap<String, String[]>();
+    sources.put("location.hash", new String[]{"location\\.hash(?![a-zA-Z])"});
+    sources.put("location.search", new String[]{"location\\.search(?![a-zA-Z])"});
+    sources.put("location.href", new String[]{"location\\.href(?!\\s*=)"});
+    sources.put("document.URL", new String[]{"document\\.URL(?![a-zA-Z])"});
+    sources.put("document.referrer", new String[]{"document\\.referrer"});
+    sources.put("document.cookie", new String[]{"document\\.cookie"});
+    sources.put("window.name", new String[]{"window\\.name(?!\\s*=)"});
+    sources.put("postMessage", new String[]{"addEventListener\\s*\\(\\s*['\"]message['\"]", "event\\.data(?![a-zA-Z])"});
+
+    // Safe patterns to skip
+    java.util.function.Function<String, Boolean> isSafeContext = (context) -> {
+        String lower = context.toLowerCase();
+        return lower.contains("swaggerui") || lower.contains("webpack") ||
+               lower.contains("jquery.min") || lower.contains("bootstrap") ||
+               (lower.contains("onload") && lower.matches(".*onload\\s*=\\s*['\"]\\w+\\(\\)['\"].*"));
+    };
+
+    // Scan for sinks
+    for (var entry : sinks.entrySet()) {
+        String sinkName = entry.getKey();
+        for (String pattern : entry.getValue()) {
+            try {
+                var regex = java.util.regex.Pattern.compile(pattern, java.util.regex.Pattern.CASE_INSENSITIVE);
+                var matcher = regex.matcher(body);
+                while (matcher.find()) {
+                    int ctxStart = Math.max(0, matcher.start() - 50);
+                    int ctxEnd = Math.min(body.length(), matcher.end() + 50);
+                    String context = body.substring(ctxStart, ctxEnd);
+                    if (!isSafeContext.apply(context)) {
+                        int lineNum = 1;
+                        for (int i = 0; i < matcher.start() && i < body.length(); i++) {
+                            if (body.charAt(i) == '\n') lineNum++;
+                        }
+                        sinkFindings.add(String.format("[L%d] %s", lineNum, sinkName));
+                    }
+                }
+            } catch (Exception e) {}
+        }
+    }
+
+    // Scan for sources
+    for (var entry : sources.entrySet()) {
+        String sourceName = entry.getKey();
+        for (String pattern : entry.getValue()) {
+            try {
+                var regex = java.util.regex.Pattern.compile(pattern, java.util.regex.Pattern.CASE_INSENSITIVE);
+                var matcher = regex.matcher(body);
+                while (matcher.find()) {
+                    int ctxStart = Math.max(0, matcher.start() - 50);
+                    int ctxEnd = Math.min(body.length(), matcher.end() + 50);
+                    String context = body.substring(ctxStart, ctxEnd);
+                    if (!isSafeContext.apply(context)) {
+                        int lineNum = 1;
+                        for (int i = 0; i < matcher.start() && i < body.length(); i++) {
+                            if (body.charAt(i) == '\n') lineNum++;
+                        }
+                        sourceFindings.add(String.format("[L%d] %s", lineNum, sourceName));
+                    }
+                }
+            } catch (Exception e) {}
+        }
+    }
+
+    int sinkCount = sinkFindings.size();
+    int sourceCount = sourceFindings.size();
+
+    if (sinkCount == 0 && sourceCount == 0) {
+        return "";
+    }
+
+    // Build notes with details
+    StringBuilder notes = new StringBuilder();
+    if (sinkCount > 0) {
+        notes.append("=== SINKS (").append(sinkCount).append(") ===\n");
+        for (String f : sinkFindings) notes.append(f).append("\n");
+    }
+    if (sourceCount > 0) {
+        if (sinkCount > 0) notes.append("\n");
+        notes.append("=== SOURCES (").append(sourceCount).append(") ===\n");
+        for (String f : sourceFindings) notes.append(f).append("\n");
+    }
+    requestResponse.annotations().setNotes(notes.toString());
+
+    // Color code based on findings
+    if (sinkCount > 0 && sourceCount > 0) {
+        requestResponse.annotations().setHighlightColor(burp.api.montoya.core.HighlightColor.RED);
+        return String.format("%s %d sink + %d src", Character.toString(0x26A0), sinkCount, sourceCount);
+    } else if (sinkCount > 0) {
+        requestResponse.annotations().setHighlightColor(burp.api.montoya.core.HighlightColor.ORANGE);
+        return String.format("%s %d sink", Character.toString(0x26A0), sinkCount);
+    } else {
+        requestResponse.annotations().setHighlightColor(burp.api.montoya.core.HighlightColor.YELLOW);
+        return String.format("%d src", sourceCount);
+    }

@@ -1,0 +1,149 @@
+id: a1b2c3d4-5e6f-7a8b-9c0d-e1f2a3b4c5d6
+name: Dangerous Source Scanner
+function: CUSTOM_ACTION
+location: REPEATER
+source: |+
+    // Caption: Dangerous Source Scanner
+    // Description: Scans HTML responses and inline JavaScript for dangerous DOM sources that could be exploited for XSS.
+    // Excludes bundled/minified JavaScript files to focus on custom code.
+
+    var response = requestResponse.response();
+    if (response == null) {
+        logging.logToOutput("[!] No response available.");
+        return;
+    }
+
+    String contentType = "";
+    var ctHeader = response.headerValue("Content-Type");
+    if (ctHeader != null) contentType = ctHeader.toLowerCase();
+
+    // Skip if not HTML or JS content
+    if (!contentType.contains("html") && !contentType.contains("javascript")) {
+        return;
+    }
+
+    String body = response.bodyToString();
+    String url = requestResponse.request().url();
+
+    // Heuristic: skip bundled/minified JS
+    if (contentType.contains("javascript")) {
+        String[] lines = body.split("\n");
+        int longLineCount = 0;
+        for (String line : lines) {
+            if (line.length() > 500) longLineCount++;
+        }
+        if (lines.length > 0 && (longLineCount * 100 / lines.length) > 50) {
+            return;
+        }
+        if (body.contains("webpackJsonp") || body.contains("__webpack_require__") ||
+            body.contains("!function(e,t)") || body.contains("define([\"require\"") ||
+            body.contains("System.register") || url.contains(".min.js") ||
+            url.contains(".bundle.js") || url.contains("vendor.js") ||
+            url.contains("chunk-") || url.contains("/dist/")) {
+            return;
+        }
+    }
+
+    // Dangerous sources categorized by type
+    var sources = new java.util.LinkedHashMap<String, String[]>();
+
+    // URL-based sources - High Risk
+    sources.put("location.hash", new String[]{"location\\.hash", "window\\.location\\.hash"});
+    sources.put("location.search", new String[]{"location\\.search", "window\\.location\\.search"});
+    sources.put("location.href", new String[]{"location\\.href(?!\\s*=)", "window\\.location\\.href(?!\\s*=)"});
+    sources.put("location.pathname", new String[]{"location\\.pathname", "window\\.location\\.pathname"});
+    sources.put("document.URL", new String[]{"document\\.URL", "document\\.documentURI"});
+    sources.put("document.baseURI", new String[]{"document\\.baseURI"});
+
+    // URL Parameters
+    sources.put("URLSearchParams", new String[]{"new\\s+URLSearchParams\\s*\\(", "URLSearchParams\\s*\\("});
+    sources.put("URL constructor", new String[]{"new\\s+URL\\s*\\([^)]*location", "new\\s+URL\\s*\\([^)]*document"});
+
+    // Document sources - High Risk
+    sources.put("document.referrer", new String[]{"document\\.referrer"});
+    sources.put("document.cookie", new String[]{"document\\.cookie"});
+    sources.put("document.domain", new String[]{"document\\.domain"});
+
+    // Window sources
+    sources.put("window.name", new String[]{"window\\.name(?!\\s*=)"});
+    sources.put("window.opener", new String[]{"window\\.opener"});
+
+    // Storage sources - Medium Risk
+    sources.put("localStorage", new String[]{"localStorage\\.getItem\\s*\\(", "localStorage\\[['\"]"});
+    sources.put("sessionStorage", new String[]{"sessionStorage\\.getItem\\s*\\(", "sessionStorage\\[['\"]"});
+
+    // postMessage source - High Risk
+    sources.put("postMessage event.data", new String[]{"event\\.data", "e\\.data", "evt\\.data", "message\\.data"});
+    sources.put("event.origin", new String[]{"event\\.origin", "e\\.origin"});
+
+    // Input sources
+    sources.put("input.value", new String[]{"\\.value(?!\\s*=)"});
+    sources.put("textContent read", new String[]{"\\.textContent(?!\\s*=)", "\\.innerText(?!\\s*=)"});
+
+    // jQuery sources
+    sources.put("jQuery param parsing", new String[]{"\\$\\.param\\s*\\(", "jQuery\\.param\\s*\\("});
+    sources.put("jQuery attr/data read", new String[]{"\\.attr\\s*\\(['\"][^'\"]+['\"]\\s*\\)", "\\.data\\s*\\(['\"][^'\"]+['\"]\\s*\\)"});
+
+    // Fetch/XHR response handling
+    sources.put("response.text()", new String[]{"\\.text\\s*\\(\\s*\\)", "response\\.text"});
+    sources.put("response.json()", new String[]{"\\.json\\s*\\(\\s*\\)", "response\\.json"});
+    sources.put("responseText", new String[]{"\\.responseText", "xhr\\.response"});
+
+    // Fragment identifier
+    sources.put("hashchange event", new String[]{"addEventListener\\s*\\(\\s*['\"]hashchange['\"]", "onhashchange"});
+    sources.put("popstate event", new String[]{"addEventListener\\s*\\(\\s*['\"]popstate['\"]"});
+
+    var findings = new java.util.ArrayList<String>();
+    int totalFindings = 0;
+
+    for (var entry : sources.entrySet()) {
+        String sourceName = entry.getKey();
+        String[] patterns = entry.getValue();
+
+        for (String pattern : patterns) {
+            try {
+                var regex = java.util.regex.Pattern.compile(pattern, java.util.regex.Pattern.CASE_INSENSITIVE);
+                var matcher = regex.matcher(body);
+
+                while (matcher.find()) {
+                    totalFindings++;
+                    
+                    int start = Math.max(0, matcher.start() - 30);
+                    int end = Math.min(body.length(), matcher.end() + 50);
+                    String context = body.substring(start, end)
+                        .replaceAll("\\s+", " ")
+                        .trim();
+
+                    // Find line number
+                    int lineNum = 1;
+                    for (int i = 0; i < matcher.start() && i < body.length(); i++) {
+                        if (body.charAt(i) == '\n') lineNum++;
+                    }
+
+                    findings.add(String.format("  [Line %d] %s: ...%s...", lineNum, sourceName, context));
+                }
+            } catch (Exception e) {
+                // Skip invalid regex
+            }
+        }
+    }
+
+    // Color-code the request/response if findings exist
+    if (totalFindings > 0) {
+        requestResponse.annotations().setHighlightColor(burp.api.montoya.core.HighlightColor.ORANGE);
+    }
+
+    // Output summary to log
+    StringBuilder output = new StringBuilder();
+    output.append("\n[SOURCE SCANNER] ").append(url).append("\n");
+
+    if (findings.isEmpty()) {
+        output.append("  ✓ No dangerous sources detected\n");
+    } else {
+        output.append("  ⚠ Found ").append(totalFindings).append(" source(s) - color-coded ORANGE\n");
+        for (String finding : findings) {
+            output.append("  ").append(finding).append("\n");
+        }
+    }
+
+    logging.logToOutput(output.toString());

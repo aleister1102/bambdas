@@ -1,0 +1,118 @@
+id: c6d7e8f9-f0a1-4cb3-c4d5-e6f7a8b9c0d1
+name: XML to Form Params
+function: CUSTOM_ACTION
+location: REPEATER
+source: |+
+  /**
+   * Converts XML request body to URL-encoded form parameters.
+   * Updates Content-Type header to application/x-www-form-urlencoded.
+   * Only works with flat XML (direct children of root element).
+   *
+   * @author assistant
+   **/
+
+  var request = requestResponse.request();
+
+  if (request.body() == null || request.body().length() == 0) {
+      logging().logToOutput("[!] No request body found");
+      return;
+  }
+
+  String bodyStr = request.bodyToString().trim();
+
+  if (!bodyStr.startsWith("<")) {
+      logging().logToOutput("[!] Request body is not XML");
+      return;
+  }
+
+  try {
+      StringBuilder formParams = new StringBuilder();
+      boolean first = true;
+
+      // Remove XML declaration
+      String xml = bodyStr.replaceAll("<\\?xml[^?]*\\?>", "").trim();
+
+      // Find root element and skip it
+      int rootStart = xml.indexOf('<');
+      int rootEnd = xml.indexOf('>', rootStart);
+      if (rootStart == -1 || rootEnd == -1) {
+          logging().logToOutput("[!] Invalid XML structure");
+          return;
+      }
+
+      // Find closing root tag
+      int lastClose = xml.lastIndexOf("</");
+      if (lastClose == -1) {
+          logging().logToOutput("[!] Invalid XML structure - no closing root tag");
+          return;
+      }
+
+      String content = xml.substring(rootEnd + 1, lastClose).trim();
+
+      // Parse child elements
+      int i = 0;
+      while (i < content.length()) {
+          // Skip whitespace
+          while (i < content.length() && Character.isWhitespace(content.charAt(i))) {
+              i++;
+          }
+          if (i >= content.length()) break;
+
+          // Find opening tag
+          if (content.charAt(i) != '<') {
+              i++;
+              continue;
+          }
+
+          int tagStart = i + 1;
+          int tagEnd = content.indexOf('>', tagStart);
+          if (tagEnd == -1) break;
+
+          String tagContent = content.substring(tagStart, tagEnd);
+          boolean selfClosing = tagContent.endsWith("/");
+          if (selfClosing) {
+              tagContent = tagContent.substring(0, tagContent.length() - 1).trim();
+          }
+
+          String tagName = tagContent.split("\\s+")[0];
+
+          String value = "";
+          if (!selfClosing) {
+              // Find closing tag
+              String closingTag = "</" + tagName + ">";
+              int closeStart = content.indexOf(closingTag, tagEnd);
+              if (closeStart != -1) {
+                  value = content.substring(tagEnd + 1, closeStart);
+                  i = closeStart + closingTag.length();
+              } else {
+                  i = tagEnd + 1;
+              }
+          } else {
+              i = tagEnd + 1;
+          }
+
+          // Unescape XML entities
+          value = value.replace("&amp;", "&")
+                       .replace("&lt;", "<")
+                       .replace("&gt;", ">")
+                       .replace("&quot;", "\"")
+                       .replace("&apos;", "'");
+
+          if (!first) {
+              formParams.append("&");
+          }
+          first = false;
+
+          formParams.append(utilities().urlUtils().encode(tagName));
+          formParams.append("=");
+          formParams.append(utilities().urlUtils().encode(value));
+      }
+
+      request = request.withBody(formParams.toString());
+      request = request.withUpdatedHeader("Content-Type", "application/x-www-form-urlencoded");
+      httpEditor.requestPane().set(request.toByteArray());
+      logging().logToOutput("[+] Converted XML to form params");
+  } catch (Exception e) {
+      logging().logToError("[!] Failed to convert: " + e.getMessage());
+  }
+

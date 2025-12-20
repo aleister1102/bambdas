@@ -1,0 +1,44 @@
+id: 12345678-90ab-cdef-1234-567890abcdef
+name: JSON Request
+function: VIEW_FILTER
+location: PROXY_HTTP_HISTORY
+source: |+
+  /**
+   * Finds state-changing requests (POST, PUT, PATCH, DELETE) with JSON request body or URL-encoded parameters.
+   *
+   * Useful to identify requests that handle structured data and modify state.
+   *
+   * @author assistant
+   **/
+
+  HttpRequest request = requestResponse.request();
+  
+  // Only include state-changing methods
+  String method = request.method();
+  if (!method.equals("POST") && !method.equals("PUT") && !method.equals("PATCH") && !method.equals("DELETE")) {
+      return false;
+  }
+
+  // Check for JSON content type in request body
+  String contentTypeHeader = request.headerValue("Content-Type");
+  if (contentTypeHeader != null && contentTypeHeader.toLowerCase().contains("application/json")) {
+      return true;
+  }
+
+  // Check if body looks like JSON
+  String body = request.bodyToString();
+  if (body != null && (body.trim().startsWith("{") || body.trim().startsWith("["))) {
+      return true;
+  }
+
+  // Check for URL-encoded parameters (BODY type parameters)
+  if (request.hasParameters()) {
+      for (ParsedHttpParameter parameter : request.parameters()) {
+          HttpParameterType paramType = parameter.type();
+          if (paramType == HttpParameterType.BODY) {
+              return true;
+          }
+      }
+  }
+
+  return false;

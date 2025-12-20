@@ -1,0 +1,203 @@
+id: d4e5f6a7-8b9c-0d1e-2f3a-4b5c6d7e8f90
+name: Dangerous Sink Scanner
+function: CUSTOM_ACTION
+location: REPEATER
+source: |+
+    // Caption: Dangerous Sink Scanner
+    // Description: Scans HTML responses and inline JavaScript for dangerous DOM sinks that could lead to XSS vulnerabilities.
+    // Excludes bundled/minified JavaScript files to focus on custom code.
+
+    var response = requestResponse.response();
+    if (response == null) {
+        logging.logToOutput("[!] No response available.");
+        return;
+    }
+
+    String contentType = "";
+    var ctHeader = response.headerValue("Content-Type");
+    if (ctHeader != null) contentType = ctHeader.toLowerCase();
+
+    // Skip if not HTML or JS content
+    if (!contentType.contains("html") && !contentType.contains("javascript")) {
+        return;
+    }
+
+    String body = response.bodyToString();
+    String url = requestResponse.request().url();
+
+    // Heuristic: skip bundled/minified JS (long lines, common bundle patterns)
+    if (contentType.contains("javascript")) {
+        // Check for minified code indicators
+        String[] lines = body.split("\n");
+        int longLineCount = 0;
+        for (String line : lines) {
+            if (line.length() > 500) longLineCount++;
+        }
+        // If most lines are very long, likely minified/bundled
+        if (lines.length > 0 && (longLineCount * 100 / lines.length) > 50) {
+            return;
+        }
+        // Common bundle patterns
+        if (body.contains("webpackJsonp") || body.contains("__webpack_require__") ||
+            body.contains("!function(e,t)") || body.contains("define([\"require\"") ||
+            body.contains("System.register") || url.contains(".min.js") ||
+            url.contains(".bundle.js") || url.contains("vendor.js") ||
+            url.contains("chunk-") || url.contains("/dist/")) {
+            return;
+        }
+    }
+
+    // Dangerous sinks categorized by risk
+    var sinks = new java.util.LinkedHashMap<String, String[]>();
+
+    // DOM XSS sinks - High Risk
+    sinks.put("innerHTML Assignment", new String[]{"\\.\\.innerHTML\\s*=", "\\.innerHTML\\s*\\+="});
+    sinks.put("outerHTML Assignment", new String[]{"\\.\\.outerHTML\\s*=", "\\.outerHTML\\s*\\+="});
+    sinks.put("document.write", new String[]{"document\\.write\\s*\\(", "document\\.writeln\\s*\\("});
+    sinks.put("eval()", new String[]{"[^a-zA-Z]eval\\s*\\(", "^eval\\s*\\("});
+    sinks.put("Function Constructor", new String[]{
+        // Only flag dangerous Function constructors, not library constructors
+        "new\\s+Function\\s*\\(\\s*['\"][^'\"]*(?:eval|innerHTML|outerHTML|document\\.write|location\\s*=)[^'\"]*['\"]",
+        "Function\\s*\\(\\s*['\"][^'\"]*(?:eval|innerHTML|outerHTML|document\\.write|location\\s*=)[^'\"]*['\"]",
+        // Flag when using variables/concatenation in Function constructor
+        "new\\s+Function\\s*\\([^)]*\\+[^)]*\\)",
+        "Function\\s*\\([^)]*\\+[^)]*\\)"
+    });
+    sinks.put("setTimeout/setInterval with string", new String[]{
+        "setTimeout\\s*\\(\\s*['\"`][^'\"]*(?:eval|innerHTML|outerHTML|document\\.write|location\\s*=)[^'\"]*['\"`]",
+        "setInterval\\s*\\(\\s*['\"`][^'\"]*(?:eval|innerHTML|outerHTML|document\\.write|location\\s*=)[^'\"]*['\"`]",
+        // Flag when using variables/concatenation in string argument
+        "setTimeout\\s*\\(\\s*['\"`][^'\"]*\\+[^'\"]*['\"`]",
+        "setInterval\\s*\\(\\s*['\"`][^'\"]*\\+[^'\"]*['\"`]"
+    });
+
+    // URL/Location sinks - High Risk
+    sinks.put("location Assignment", new String[]{"location\\s*=", "location\\.href\\s*=", "location\\.replace\\s*\\(", "location\\.assign\\s*\\("});
+    sinks.put("window.open", new String[]{"window\\.open\\s*\\("});
+
+    // DOM Manipulation sinks - Medium Risk
+    sinks.put("insertAdjacentHTML", new String[]{"\\.insertAdjacentHTML\\s*\\("});
+    sinks.put("createContextualFragment", new String[]{"\\.createContextualFragment\\s*\\("});
+    sinks.put("DOMParser parseFromString", new String[]{"DOMParser.*parseFromString"});
+
+    // Script/Style injection - High Risk
+    sinks.put("Script src Assignment", new String[]{"\\.src\\s*=(?!.*\\.(png|jpg|gif|ico|svg))"});
+    sinks.put("jQuery html()", new String[]{"\\.html\\s*\\([^)]+\\)", "\\$\\([^)]+\\)\\.html\\s*\\("});
+    sinks.put("jQuery append/prepend", new String[]{"\\.append\\s*\\(['\"`<]", "\\.prepend\\s*\\(['\"`<]"});
+
+    // Dangerous HTML attributes in markup - only flag if they contain dangerous patterns or dynamic content
+    sinks.put("onclick/onerror handlers", new String[]{
+        // Only flag handlers that contain dangerous functions AND are not simple static calls
+        "\\s+on(?:click|error|mouseover|mouseout|focus|blur|load|unload|change|submit|keydown|keyup|keypress)\\s*=\\s*['\"][^'\"]*(?:eval|innerHTML|outerHTML|document\\.write|location\\s*=|window\\.open|new\\s+Function|setTimeout\\s*\\(\\s*['\"]|setInterval\\s*\\(\\s*['\"]|fetch|XMLHttpRequest)[^'\"]*['\"]",
+        // Flag handlers with string concatenation (suggests dynamic content)
+        "\\s+on\\w+\\s*=\\s*['\"][^'\"]*\\+[^'\"]*['\"]",
+        // Flag handlers that read from dangerous sources
+        "\\s+on\\w+\\s*=\\s*['\"][^'\"]*(?:location\\.|document\\.cookie|window\\.name|event\\.data)[^'\"]*['\"]"
+    });
+    sinks.put("javascript: URI", new String[]{"href\\s*=\\s*['\"]javascript:", "src\\s*=\\s*['\"]javascript:"});
+
+    // postMessage sinks
+    sinks.put("postMessage", new String[]{"\\.postMessage\\s*\\("});
+    sinks.put("addEventListener message", new String[]{"addEventListener\\s*\\(\\s*['\"]message['\"]"});
+
+    var findings = new java.util.ArrayList<String>();
+    int totalFindings = 0;
+
+    // Helper function to check for known safe patterns
+    java.util.function.BiFunction<String, String, Boolean> isKnownSafePattern = (matchText, sinkName) -> {
+        String lowerMatch = matchText.toLowerCase();
+        
+        // Safe onload patterns
+        if (sinkName.equals("onclick/onerror handlers") && lowerMatch.contains("onload")) {
+            // Allow simple function calls without dangerous operations
+            if (lowerMatch.matches(".*onload\\s*=\\s*['\"]javascript:\\s*\\w+\\s*\\(\\s*\\)['\"].*") ||
+                lowerMatch.matches(".*onload\\s*=\\s*['\"]\\w+\\s*\\(\\s*\\)['\"].*")) {
+                return true;
+            }
+        }
+        
+        // Safe form submissions
+        if (lowerMatch.contains("submit()") && !lowerMatch.contains("eval") && 
+            !lowerMatch.contains("innerhtml") && !lowerMatch.contains("location")) {
+            return true;
+        }
+        
+        // Safe library constructors (SwaggerUIBundle, etc.)
+        if (lowerMatch.contains("new") && (
+            lowerMatch.contains("swaggeruibundle") || 
+            lowerMatch.contains("swaggerui") ||
+            lowerMatch.contains("bootstrap") ||
+            lowerMatch.contains("jquery") ||
+            lowerMatch.contains("angular") ||
+            lowerMatch.contains("react") ||
+            lowerMatch.contains("vue"))) {
+            return true;
+        }
+        
+        // Safe document method calls without parameters or with static parameters
+        if (lowerMatch.matches(".*document\\.(forms|getElementById|getElementsBy).*") &&
+            !lowerMatch.contains("innerhtml") && !lowerMatch.contains("write")) {
+            return true;
+        }
+        
+        return false;
+    };
+
+    for (var entry : sinks.entrySet()) {
+        String sinkName = entry.getKey();
+        String[] patterns = entry.getValue();
+
+        for (String pattern : patterns) {
+            try {
+                var regex = java.util.regex.Pattern.compile(pattern, java.util.regex.Pattern.CASE_INSENSITIVE);
+                var matcher = regex.matcher(body);
+
+                while (matcher.find()) {
+                    String matchText = matcher.group();
+                    
+                    // Skip common safe patterns
+                    if (isKnownSafePattern.apply(matchText, sinkName)) {
+                        continue;
+                    }
+                    
+                    totalFindings++;
+                    
+                    int start = Math.max(0, matcher.start() - 30);
+                    int end = Math.min(body.length(), matcher.end() + 50);
+                    String context = body.substring(start, end)
+                        .replaceAll("\\s+", " ")
+                        .trim();
+
+                    // Find line number
+                    int lineNum = 1;
+                    for (int i = 0; i < matcher.start() && i < body.length(); i++) {
+                        if (body.charAt(i) == '\n') lineNum++;
+                    }
+
+                    findings.add(String.format("  [Line %d] %s: ...%s...", lineNum, sinkName, context));
+                }
+            } catch (Exception e) {
+                // Skip invalid regex
+            }
+        }
+    }
+
+    // Color-code the request/response if findings exist
+    if (totalFindings > 0) {
+        requestResponse.annotations().setHighlightColor(burp.api.montoya.core.HighlightColor.RED);
+    }
+
+    // Output summary to log
+    StringBuilder output = new StringBuilder();
+    output.append("\n[SINK SCANNER] ").append(url).append("\n");
+
+    if (findings.isEmpty()) {
+        output.append("  ✓ No dangerous sinks detected\n");
+    } else {
+        output.append("  ⚠ Found ").append(totalFindings).append(" sink(s) - color-coded RED\n");
+        for (String finding : findings) {
+            output.append("  ").append(finding).append("\n");
+        }
+    }
+
+    logging.logToOutput(output.toString());

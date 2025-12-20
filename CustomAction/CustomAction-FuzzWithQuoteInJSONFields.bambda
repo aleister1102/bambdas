@@ -1,5 +1,5 @@
 id: f3c8d2a1-7e4b-4f9c-b8d6-2a1e3f5c7d9b
-name: Add Quote to JSON String Fields
+name: Fuzz With Quote In JSON Fields
 function: CUSTOM_ACTION
 location: REPEATER
 source: |+
@@ -66,13 +66,41 @@ source: |+
           if (boundary.startsWith("\"") && boundary.endsWith("\"")) {
               boundary = boundary.substring(1, boundary.length() - 1);
           }
-          fullBody = request.bodyToString();
+          // Handle semicolon after boundary (e.g., boundary=xxx; charset=utf-8)
+          int semiIdx = boundary.indexOf(";");
+          if (semiIdx != -1) {
+              boundary = boundary.substring(0, semiIdx);
+          }
+          boundary = boundary.trim();
           
-          // Parse multipart parts to find JSON values
-          String[] parts = fullBody.split("--" + boundary);
-          int currentPos = 0;
-          for (String part : parts) {
-              if (part.trim().isEmpty() || part.trim().equals("--")) continue;
+          fullBody = request.bodyToString();
+          String fullBoundary = "--" + boundary;
+          
+          // Find each part by searching for boundaries directly in the body
+          int searchPos = 0;
+          while (true) {
+              int partStart = fullBody.indexOf(fullBoundary, searchPos);
+              if (partStart == -1) break;
+              
+              // Move past the boundary
+              partStart += fullBoundary.length();
+              
+              // Check for closing boundary (--)
+              if (partStart + 2 <= fullBody.length() && fullBody.substring(partStart, partStart + 2).equals("--")) {
+                  break;
+              }
+              
+              // Find the end of this part (next boundary)
+              int partEnd = fullBody.indexOf(fullBoundary, partStart);
+              if (partEnd == -1) partEnd = fullBody.length();
+              
+              String part = fullBody.substring(partStart, partEnd);
+              
+              // Skip if this is a file upload (has filename=)
+              if (part.contains("filename=")) {
+                  searchPos = partEnd;
+                  continue;
+              }
               
               // Find field name
               java.util.regex.Pattern namePattern = java.util.regex.Pattern.compile("name=\"([^\"]+)\"");
@@ -81,34 +109,50 @@ source: |+
                   String fieldName = nameMatcher.group(1);
                   
                   // Find the value (after double newline)
-                  int valueStart = part.indexOf("\r\n\r\n");
-                  if (valueStart == -1) valueStart = part.indexOf("\n\n");
-                  if (valueStart != -1) {
-                      valueStart += (part.charAt(valueStart) == '\r') ? 4 : 2;
-                      String value = part.substring(valueStart).trim();
+                  int headerEnd = part.indexOf("\r\n\r\n");
+                  int headerLen = 4;
+                  if (headerEnd == -1) {
+                      headerEnd = part.indexOf("\n\n");
+                      headerLen = 2;
+                  }
+                  
+                  if (headerEnd != -1) {
+                      int valueStartInPart = headerEnd + headerLen;
+                      String rawValue = part.substring(valueStartInPart);
+                      
+                      // Remove trailing CRLF before next boundary
+                      String value = rawValue;
+                      if (value.endsWith("\r\n")) {
+                          value = value.substring(0, value.length() - 2);
+                      } else if (value.endsWith("\n")) {
+                          value = value.substring(0, value.length() - 1);
+                      }
+                      value = value.trim();
                       
                       // Check if value is JSON
                       if (value.startsWith("{") || value.startsWith("[")) {
-                          // Find actual position in full body
-                          int partStartInBody = fullBody.indexOf(part);
-                          int jsonStartInBody = partStartInBody + valueStart;
-                          int jsonEndInBody = jsonStartInBody + value.length();
+                          // Calculate actual position in full body
+                          // partStart is where this part begins (after boundary)
+                          // valueStartInPart is offset within part to the value
+                          int jsonStartInBody = partStart + valueStartInPart;
                           
-                          // Trim trailing boundary markers
-                          if (value.endsWith("--")) {
-                              value = value.substring(0, value.length() - 2).trim();
-                              jsonEndInBody = jsonStartInBody + value.length();
+                          // Find the actual JSON start (skip any leading whitespace)
+                          while (jsonStartInBody < fullBody.length() && 
+                                 Character.isWhitespace(fullBody.charAt(jsonStartInBody)) &&
+                                 fullBody.charAt(jsonStartInBody) != '{' && 
+                                 fullBody.charAt(jsonStartInBody) != '[') {
+                              jsonStartInBody++;
                           }
-                          if (value.endsWith("\r\n") || value.endsWith("\n")) {
-                              value = value.trim();
-                              jsonEndInBody = jsonStartInBody + value.length();
-                          }
+                          
+                          int jsonEndInBody = jsonStartInBody + value.length();
                           
                           multipartJsonFields.add(new Object[]{fieldName, value, jsonStartInBody, jsonEndInBody});
                           hasMultipart = true;
                       }
                   }
               }
+              
+              searchPos = partEnd;
           }
       }
   }
@@ -439,8 +483,9 @@ source: |+
               // Send error responses to Organizer (exclude 2xx, 3xx, 401, 402, 403, 404)
               boolean isRetryableError = statusCode >= 400 && statusCode != 401 && statusCode != 402 && statusCode != 403 && statusCode != 404;
               if (statusCode >= 400) {
-                  String note = String.format("[SQLi Test] Location: request body | Field: %s | Type: %s | Original: %s | Injected: %s | Status: %d", 
-                      fieldName, fieldType, originalValue, injectedValue, statusCode);
+                  String timestamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+                  String note = String.format("[SQLi Test] Time: %s | Location: request body | Field: %s | Type: %s | Original: %s | Injected: %s | Status: %d", 
+                      timestamp, fieldName, fieldType, originalValue, injectedValue, statusCode);
                   var reqRespForOrganizer = burp.api.montoya.http.message.HttpRequestResponse.httpRequestResponse(modifiedRequest, response.response());
                   reqRespForOrganizer.annotations().setNotes(note);
                   api().organizer().sendToOrganizer(reqRespForOrganizer);
@@ -513,19 +558,19 @@ source: |+
           int mpJsonStart = (Integer) multipartField[2];
           int mpJsonEnd = (Integer) multipartField[3];
           
-          logging().logToOutput("\n[*] Multipart field '" + mpFieldName + "' JSON: " + (mpJson.length() > 200 ? mpJson.substring(0, 200) + "..." : mpJson));
+          logging().logToOutput("[*] Multipart field '" + mpFieldName + "' JSON: " + (mpJson.length() > 200 ? mpJson.substring(0, 200) + "..." : mpJson));
           
           var mpInjectionPoints = new java.util.ArrayList();
           
-          // Find "key":"value" patterns (strings)
+          // Find "key":"value" patterns (strings) - handles nested objects
           java.util.regex.Pattern mpP = java.util.regex.Pattern.compile("\"([^\"]+)\"\\s*:\\s*\"([^\"]*)\"");
           java.util.regex.Matcher mpM = mpP.matcher(mpJson);
           while (mpM.find()) {
               mpInjectionPoints.add(new Object[]{new int[]{mpM.start(2), mpM.end(2)}, mpM.group(1), mpM.group(2), "'", "string"});
           }
           
-          // Find "key":number patterns
-          java.util.regex.Pattern mpPNum = java.util.regex.Pattern.compile("\"([^\"]+)\"\\s*:\\s*(-?\\d+\\.?\\d*)");
+          // Find "key":number patterns (not followed by object/array)
+          java.util.regex.Pattern mpPNum = java.util.regex.Pattern.compile("\"([^\"]+)\"\\s*:\\s*(-?\\d+\\.?\\d*)(?=[,}\\]\\s])");
           java.util.regex.Matcher mpMNum = mpPNum.matcher(mpJson);
           while (mpMNum.find()) {
               int numStart = mpMNum.start(2);
@@ -533,6 +578,15 @@ source: |+
               String numValue = mpMNum.group(2);
               mpInjectionPoints.add(new Object[]{new int[]{numStart, numEnd}, mpMNum.group(1), numValue, "\"" + numValue + "\"", "number->string"});
               mpInjectionPoints.add(new Object[]{new int[]{numStart, numEnd}, mpMNum.group(1), numValue, "\"" + numValue + "'\"", "number->string'"});
+          }
+          
+          // Find empty arrays "key":[] anywhere in JSON (including nested objects)
+          java.util.regex.Pattern mpPEmptyArray = java.util.regex.Pattern.compile("\"([^\"]+)\"\\s*:\\s*(\\[\\s*\\])");
+          java.util.regex.Matcher mpMEmptyArray = mpPEmptyArray.matcher(mpJson);
+          while (mpMEmptyArray.find()) {
+              int arrayStart = mpMEmptyArray.start(2);
+              int arrayEnd = mpMEmptyArray.end(2) - 1; // Position before closing ]
+              mpInjectionPoints.add(new Object[]{new int[]{arrayStart, arrayEnd}, mpMEmptyArray.group(1) + " (empty array)", "[]", "\"bambda'\"", "array"});
           }
           
           // Find strings in arrays
@@ -549,6 +603,25 @@ source: |+
               }
               if (!isDuplicate) {
                   mpInjectionPoints.add(new Object[]{new int[]{valueStart, valueEnd}, "array_item", mpMArrayStr.group(1), "'", "string"});
+              }
+          }
+          
+          // Find numbers in arrays
+          java.util.regex.Pattern mpPArrayNum = java.util.regex.Pattern.compile("\\[\\s*(-?\\d+\\.?\\d*)");
+          java.util.regex.Matcher mpMArrayNum = mpPArrayNum.matcher(mpJson);
+          while (mpMArrayNum.find()) {
+              int numStart = mpMArrayNum.start(1);
+              int numEnd = mpMArrayNum.end(1);
+              String numValue = mpMArrayNum.group(1);
+              boolean isDuplicate = false;
+              for (int i = 0; i < mpInjectionPoints.size(); i++) {
+                  Object[] existing = (Object[]) mpInjectionPoints.get(i);
+                  int[] existingPos = (int[]) existing[0];
+                  if (existingPos[0] == numStart) { isDuplicate = true; break; }
+              }
+              if (!isDuplicate) {
+                  mpInjectionPoints.add(new Object[]{new int[]{numStart, numEnd}, "array_num", numValue, "\"" + numValue + "\"", "number->string"});
+                  mpInjectionPoints.add(new Object[]{new int[]{numStart, numEnd}, "array_num", numValue, "\"" + numValue + "'\"", "number->string'"});
               }
           }
           
@@ -597,8 +670,9 @@ source: |+
                   // Send error responses to Organizer
                   boolean isRetryableError = statusCode >= 400 && statusCode != 401 && statusCode != 402 && statusCode != 403 && statusCode != 404;
                   if (statusCode >= 400) {
-                      String note = String.format("[SQLi Test] Location: multipart field '%s' | Field: %s | Type: %s | Original: %s | Injected: %s | Status: %d", 
-                          mpFieldName, fieldName, fieldType, originalValue, injectedValue, statusCode);
+                      String timestamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+                      String note = String.format("[SQLi Test] Time: %s | Location: multipart field '%s' | Field: %s | Type: %s | Original: %s | Injected: %s | Status: %d", 
+                          timestamp, mpFieldName, fieldName, fieldType, originalValue, injectedValue, statusCode);
                       var reqRespForOrganizer = burp.api.montoya.http.message.HttpRequestResponse.httpRequestResponse(modifiedRequest, response.response());
                       reqRespForOrganizer.annotations().setNotes(note);
                       api().organizer().sendToOrganizer(reqRespForOrganizer);

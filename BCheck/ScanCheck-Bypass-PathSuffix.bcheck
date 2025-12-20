@@ -33,7 +33,7 @@ run for each:
 given request then
     if {base.response.status_code} matches "(401|403)" then
         send request:
-            appending to path: {path_suffix}
+            appending path: {path_suffix}
 
         if {latest.response.status_code} matches "^[23]" then
             report issue:

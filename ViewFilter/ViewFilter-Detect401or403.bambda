@@ -1,0 +1,14 @@
+id: 46134280-efbc-4987-bb5e-ccaff7692b71
+name: Detect 401/403 Unauthorized or Forbidden
+function: VIEW_FILTER
+location: PROXY_HTTP_HISTORY
+source: |+
+  /**
+  * Bambda Script to Detect "401 Unauthorized" or "403 Forbidden" in HTTP Response
+  * @author ctflearner
+  * This script identifies if the HTTP response status code is 401 (Unauthorized) or 403 (Forbidden).
+  * It ensures there is a response and checks if the status code indicates access is denied.
+  **/
+
+  int statusCode = requestResponse.response().statusCode();
+  return requestResponse.hasResponse() && (statusCode == 401 || statusCode == 403);

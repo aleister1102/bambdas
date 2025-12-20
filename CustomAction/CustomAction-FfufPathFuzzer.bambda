@@ -1,0 +1,99 @@
+id: f4a8b2c1-9d3e-4f5a-8b7c-ffuf12345678
+name: Ffuf Path Fuzzer
+function: CUSTOM_ACTION
+location: REPEATER
+source: |+
+  /**
+   * Appends FUZZ to the last path segment and generates ffuf command.
+   * Handles GET, POST with JSON body, multipart, and form-encoded requests.
+   *
+   * @author bambdas
+   **/
+
+  var request = requestResponse.request();
+  var httpService = requestResponse.httpService();
+  
+  String method = request.method();
+  String path = request.path();
+  String body = request.bodyToString();
+  var headers = request.headers();
+  
+  // Build base URL
+  String scheme = httpService.secure() ? "https" : "http";
+  String host = httpService.host();
+  int port = httpService.port();
+  
+  String baseUrl;
+  if ((scheme.equals("https") && port == 443) || (scheme.equals("http") && port == 80)) {
+      baseUrl = scheme + "://" + host;
+  } else {
+      baseUrl = scheme + "://" + host + ":" + port;
+  }
+  
+  // Extract path and query string
+  String pathOnly = path;
+  String queryString = "";
+  int queryPos = path.indexOf('?');
+  if (queryPos != -1) {
+      pathOnly = path.substring(0, queryPos);
+      queryString = path.substring(queryPos);
+  }
+  
+  // Append FUZZ to last path segment
+  String fuzzedPath;
+  if (pathOnly.endsWith("/")) {
+      fuzzedPath = pathOnly + "FUZZ";
+  } else {
+      fuzzedPath = pathOnly + "/FUZZ";
+  }
+  fuzzedPath = fuzzedPath + queryString;
+  
+  // Modify the request in the editor
+  var modifiedRequest = request.withPath(fuzzedPath);
+  httpEditor.requestPane().set(modifiedRequest.toByteArray());
+  
+  // Detect content type
+  String contentType = "";
+  for (var header : headers) {
+      if (header.name().equalsIgnoreCase("Content-Type")) {
+          contentType = header.value().toLowerCase();
+          break;
+      }
+  }
+  
+  // Build ffuf command
+  StringBuilder ffufCmd = new StringBuilder();
+  ffufCmd.append("ffuf -u '").append(baseUrl).append(fuzzedPath).append("'");
+  
+  if (!method.equals("GET")) {
+      ffufCmd.append(" -X ").append(method);
+  }
+  
+  // Add headers (skip pseudo-headers, Host, Content-Length)
+  for (var header : headers) {
+      String name = header.name();
+      String value = header.value();
+      
+      if (name.startsWith(":") || name.equalsIgnoreCase("Host") || name.equalsIgnoreCase("Content-Length")) {
+          continue;
+      }
+      
+      value = value.replace("'", "'\\''");
+      ffufCmd.append(" -H '").append(name).append(": ").append(value).append("'");
+  }
+  
+  // Handle body based on content type
+  if (body != null && !body.isEmpty()) {
+      if (contentType.contains("multipart/form-data")) {
+          // For multipart, save body to file and use -request flag
+          logging.logToOutput("[!] Multipart detected - save full request to file and use: ffuf -request request.txt -w wordlist.txt");
+      } else {
+          String escapedBody = body.replace("'", "'\\''");
+          ffufCmd.append(" -d '").append(escapedBody).append("'");
+      }
+  }
+  
+  ffufCmd.append(" -ac -w /path/to/wordlist.txt");
+  
+  logging.logToOutput("[ffuf] " + pathOnly + " -> " + fuzzedPath.replace(queryString, ""));
+  logging.logToOutput(ffufCmd.toString());
