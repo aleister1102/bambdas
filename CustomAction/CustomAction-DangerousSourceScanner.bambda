@@ -76,18 +76,33 @@ source: |+
     sources.put("postMessage event.data", new String[]{"event\\.data", "e\\.data", "evt\\.data", "message\\.data"});
     sources.put("event.origin", new String[]{"event\\.origin", "e\\.origin"});
 
-    // Input sources
-    sources.put("input.value", new String[]{"\\.value(?!\\s*=)"});
+    // Input sources - only flag when element selector is tainted (user-controlled)
+    // e.g., getElementById(location.hash).value or querySelector(userInput).value
+    sources.put("tainted element selector", new String[]{
+        "getElementById\\s*\\(\\s*location\\.",
+        "getElementById\\s*\\(\\s*document\\.(URL|referrer|cookie)",
+        "getElementById\\s*\\(\\s*window\\.name",
+        "querySelector\\s*\\(\\s*location\\.",
+        "querySelector\\s*\\(\\s*document\\.(URL|referrer|cookie)",
+        "\\$\\s*\\(\\s*location\\.",
+        "\\$\\s*\\(\\s*document\\.(URL|referrer|cookie)"
+    });
+    
     sources.put("textContent read", new String[]{"\\.textContent(?!\\s*=)", "\\.innerText(?!\\s*=)"});
 
     // jQuery sources
     sources.put("jQuery param parsing", new String[]{"\\$\\.param\\s*\\(", "jQuery\\.param\\s*\\("});
-    sources.put("jQuery attr/data read", new String[]{"\\.attr\\s*\\(['\"][^'\"]+['\"]\\s*\\)", "\\.data\\s*\\(['\"][^'\"]+['\"]\\s*\\)"});
+    // Only match jQuery attr/data when reading from DOM elements (not setting)
+    sources.put("jQuery attr/data read", new String[]{
+        "\\$\\s*\\(['\"][^'\"]*['\"]\\s*\\)\\.attr\\s*\\(['\"][^'\"]+['\"]\\s*\\)",
+        "\\$\\s*\\(['\"][^'\"]*['\"]\\s*\\)\\.data\\s*\\(['\"][^'\"]+['\"]\\s*\\)"
+    });
 
-    // Fetch/XHR response handling
-    sources.put("response.text()", new String[]{"\\.text\\s*\\(\\s*\\)", "response\\.text"});
-    sources.put("response.json()", new String[]{"\\.json\\s*\\(\\s*\\)", "response\\.json"});
-    sources.put("responseText", new String[]{"\\.responseText", "xhr\\.response"});
+    // Fetch/XHR response handling - only flag when used in dangerous sinks, not logging
+    sources.put("response.text()", new String[]{"response\\.text\\s*\\(\\s*\\)"});
+    sources.put("response.json()", new String[]{"response\\.json\\s*\\(\\s*\\)"});
+    // Note: responseText and input.value with hardcoded selectors are NOT sources
+    // They only become dangerous when the selector itself is user-controlled
 
     // Fragment identifier
     sources.put("hashchange event", new String[]{"addEventListener\\s*\\(\\s*['\"]hashchange['\"]", "onhashchange"});
