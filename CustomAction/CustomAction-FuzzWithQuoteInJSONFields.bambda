@@ -1,17 +1,219 @@
+```
 id: f3c8d2a1-7e4b-4f9c-b8d6-2a1e3f5c7d9b
 name: Fuzz With Quote In JSON Fields
 function: CUSTOM_ACTION
 location: REPEATER
 source: |+
-  /**
-   * Iterates through URL-encoded JSON in query parameters AND request body,
-   * adds a single quote to each string and number field one at a time,
-   * sending a request for each modification.
-   * 
-   * Useful for SQL injection testing on JSON-based APIs.
-   *
-   * @author insomnia1102
-   **/
+   /**
+    * Iterates through URL-encoded JSON in query parameters AND request body,
+    * adds a single quote to each string and number field one at a time,
+    * sending a request for each modification.
+    * 
+    * Useful for SQL injection testing on JSON-based APIs.
+    *
+    * @author insomnia1102
+    **/
+
+   class JsonWalker {
+       private String json;
+       private java.util.List<Object[]> injectionPoints;
+
+       public JsonWalker(String json) {
+           this.json = json;
+           this.injectionPoints = new java.util.ArrayList<>();
+       }
+
+       public java.util.List<Object[]> walk() {
+           if (json == null || json.isEmpty()) return injectionPoints;
+           parseValue(0, new java.util.ArrayList<>());
+           return injectionPoints;
+       }
+
+       private int parseValue(int index, java.util.List<String> path) {
+           index = skipWhitespace(index);
+           if (index >= json.length()) return index;
+
+           char c = json.charAt(index);
+           if (c == '"') {
+               return parseString(index, path);
+           } else if (c == '{') {
+               return parseObject(index, path);
+           } else if (c == '[') {
+               return parseArray(index, path);
+           } else if (Character.isDigit(c) || c == '-') {
+               return parseNumber(index, path);
+           } else {
+               return parseLiteral(index);
+           }
+       }
+
+       private int parseString(int index, java.util.List<String> path) {
+           int start = index;
+           index++; // skip quote
+           while (index < json.length()) {
+               char c = json.charAt(index);
+               if (c == '"') {
+                   index++;
+                   break;
+               }
+               if (c == '\\') {
+                   index++;
+               }
+               index++;
+           }
+           int end = index;
+           String val = json.substring(start + 1, end - 1); // remove quotes
+           
+           String name = path.isEmpty() ? "root" : String.join(".", path);
+           injectionPoints.add(new Object[]{new int[]{start + 1, end - 1}, name, val, "'", "string"});
+           
+           return index;
+       }
+       
+       private int parseStringToken(int index) {
+           index++; 
+           while (index < json.length()) {
+               char c = json.charAt(index);
+               if (c == '"') {
+                   return index + 1;
+               }
+               if (c == '\\') index++;
+               index++;
+           }
+           return index;
+       }
+
+       private int parseNumber(int index, java.util.List<String> path) {
+           int start = index;
+           while (index < json.length()) {
+               char c = json.charAt(index);
+               if (Character.isDigit(c) || c == '-' || c == '.' || c == 'e' || c == 'E' || c == '+') {
+                   index++;
+               } else {
+                   break;
+               }
+           }
+           int end = index;
+           String val = json.substring(start, end);
+           String name = path.isEmpty() ? "root" : String.join(".", path);
+           
+           injectionPoints.add(new Object[]{new int[]{start, end}, name, val, "\"" + val + "\"", "number->string"});
+           injectionPoints.add(new Object[]{new int[]{start, end}, name, val, "\"" + val + "'\"", "number->string'"});
+           
+           return index;
+       }
+
+       private int parseObject(int index, java.util.List<String> path) {
+           index++; // skip {
+           while (index < json.length()) {
+               index = skipWhitespace(index);
+               if (index >= json.length()) break;
+               if (json.charAt(index) == '}') return index + 1;
+
+               if (json.charAt(index) == '"') {
+                   int keyStart = index;
+                   int keyEnd = parseStringToken(index);
+                   String key = unquote(json.substring(keyStart, keyEnd));
+                   
+                   index = keyEnd;
+                   index = skipWhitespace(index);
+                   if (index < json.length() && json.charAt(index) == ':') {
+                       index++;
+                   }
+                   
+                   path.add(key);
+                   index = parseValue(index, path);
+                   path.remove(path.size() - 1);
+               } else {
+                    index++;
+               }
+
+               index = skipWhitespace(index);
+               if (index < json.length()) {
+                   if (json.charAt(index) == ',') {
+                       index++;
+                   } else if (json.charAt(index) == '}') {
+                       return index + 1;
+                   }
+               }
+           }
+           return index;
+       }
+
+       private int parseArray(int index, java.util.List<String> path) {
+           int arrayStart = index;
+           index++; // skip [
+           int i = 0;
+           
+           index = skipWhitespace(index);
+           if (index < json.length() && json.charAt(index) == ']') {
+                int arrayEnd = index + 1;
+                String name = String.join(".", path);
+                
+                // Add two injection points: one control (string) and one test (string with quote)
+                injectionPoints.add(new Object[]{
+                    new int[]{arrayStart, arrayEnd - 1},
+                    name + " (empty array)", 
+                    "[]", 
+                    "\"bambda\"", 
+                    "array"
+                });
+                injectionPoints.add(new Object[]{
+                    new int[]{arrayStart, arrayEnd - 1},
+                    name + " (empty array)", 
+                    "[]", 
+                    "\"bambda'\"", 
+                    "array'"
+                });
+                return arrayEnd;
+           }
+
+           while (index < json.length()) {
+               String arrayItemKey = String.valueOf(i);
+               path.add(arrayItemKey);
+               
+               index = parseValue(index, path);
+               path.remove(path.size() - 1);
+               
+               i++;
+               index = skipWhitespace(index);
+               if (index < json.length()) {
+                   if (json.charAt(index) == ',') {
+                       index++;
+                   } else if (json.charAt(index) == ']') {
+                       return index + 1;
+                   }
+               }
+           }
+           return index;
+       }
+
+       private int parseLiteral(int index) {
+           while (index < json.length()) {
+               char c = json.charAt(index);
+               if (c == ',' || c == '}' || c == ']' || Character.isWhitespace(c)) {
+                   break;
+               }
+               index++;
+           }
+           return index;
+       }
+
+       private int skipWhitespace(int index) {
+           while (index < json.length() && Character.isWhitespace(json.charAt(index))) {
+               index++;
+           }
+           return index;
+       }
+       
+       private String unquote(String s) {
+           if (s.length() >= 2 && s.startsWith("\"") && s.endsWith("\"")) {
+               return s.substring(1, s.length() - 1);
+           }
+           return s;
+       }
+   }
+
   
   var request = requestResponse.request();
   var httpVersion = request.httpVersion().equals("HTTP/2") ? HttpMode.HTTP_2 : HttpMode.HTTP_1;
@@ -171,71 +373,7 @@ source: |+
       String decodedJson = utilities().urlUtils().decode(encodedJson);
       logging().logToOutput("[*] Query Param JSON: " + decodedJson);
       
-      var injectionPoints = new java.util.ArrayList();
-      
-      // Find "key":"value" patterns (strings)
-      java.util.regex.Pattern p = java.util.regex.Pattern.compile("\"([^\"]+)\"\\s*:\\s*\"([^\"]*)\"");
-      java.util.regex.Matcher m = p.matcher(decodedJson);
-      while (m.find()) {
-          injectionPoints.add(new Object[]{new int[]{m.start(2), m.end(2)}, m.group(1), m.group(2), "'", "string"});
-      }
-      
-      // Find "key":number patterns - test both "num" and "num'"
-      java.util.regex.Pattern pNum = java.util.regex.Pattern.compile("\"([^\"]+)\"\\s*:\\s*(-?\\d+\\.?\\d*)");
-      java.util.regex.Matcher mNum = pNum.matcher(decodedJson);
-      while (mNum.find()) {
-          int numStart = mNum.start(2);
-          int numEnd = mNum.end(2);
-          String numValue = mNum.group(2);
-          // First test: convert number to string "num"
-          injectionPoints.add(new Object[]{new int[]{numStart, numEnd}, mNum.group(1), numValue, "\"" + numValue + "\"", "number->string"});
-          // Second test: convert number to string with quote "num'"
-          injectionPoints.add(new Object[]{new int[]{numStart, numEnd}, mNum.group(1), numValue, "\"" + numValue + "'\"", "number->string'"});
-      }
-      
-      // Find empty arrays "key":[]
-      java.util.regex.Pattern pArray = java.util.regex.Pattern.compile("\"([^\"]+)\"\\s*:\\s*(\\[\\s*\\])");
-      java.util.regex.Matcher mArray = pArray.matcher(decodedJson);
-      while (mArray.find()) {
-          int insertionPoint = mArray.end(2) - 1;
-          injectionPoints.add(new Object[]{new int[]{mArray.start(2), insertionPoint}, mArray.group(1) + " (empty array)", "[]", "\"bambda'\"", "array"});
-      }
-      
-      // Find strings in arrays
-      java.util.regex.Pattern pArrayStr = java.util.regex.Pattern.compile("\\[\\s*\"([^\"]*)\"");
-      java.util.regex.Matcher mArrayStr = pArrayStr.matcher(decodedJson);
-      while (mArrayStr.find()) {
-          int valueStart = mArrayStr.start(1);
-          int valueEnd = mArrayStr.end(1);
-          boolean isDuplicate = false;
-          for (int i = 0; i < injectionPoints.size(); i++) {
-              Object[] existing = (Object[]) injectionPoints.get(i);
-              int[] existingPos = (int[]) existing[0];
-              if (existingPos[0] == valueStart) { isDuplicate = true; break; }
-          }
-          if (!isDuplicate) {
-              injectionPoints.add(new Object[]{new int[]{valueStart, valueEnd}, "array_item", mArrayStr.group(1), "'", "string"});
-          }
-      }
-      
-      // Find numbers in arrays - test both "num" and "num'"
-      java.util.regex.Pattern pArrayNum = java.util.regex.Pattern.compile("\\[\\s*(-?\\d+\\.?\\d*)");
-      java.util.regex.Matcher mArrayNum = pArrayNum.matcher(decodedJson);
-      while (mArrayNum.find()) {
-          int numStart = mArrayNum.start(1);
-          int numEnd = mArrayNum.end(1);
-          String numValue = mArrayNum.group(1);
-          boolean isDuplicate = false;
-          for (int i = 0; i < injectionPoints.size(); i++) {
-              Object[] existing = (Object[]) injectionPoints.get(i);
-              int[] existingPos = (int[]) existing[0];
-              if (existingPos[0] == numStart) { isDuplicate = true; break; }
-          }
-          if (!isDuplicate) {
-              injectionPoints.add(new Object[]{new int[]{numStart, numEnd}, "array_num", numValue, "\"" + numValue + "\"", "number->string"});
-              injectionPoints.add(new Object[]{new int[]{numStart, numEnd}, "array_num", numValue, "\"" + numValue + "'\"", "number->string'"});
-          }
-      }
+      var injectionPoints = new JsonWalker(decodedJson).walk();
       
       logging().logToOutput("[*] Found " + injectionPoints.size() + " field(s) to test in query\n");
       
@@ -374,71 +512,7 @@ source: |+
   if (hasJsonBody) {
       logging().logToOutput("\n[*] Body JSON: " + (bodyJson.length() > 200 ? bodyJson.substring(0, 200) + "..." : bodyJson));
       
-      var bodyInjectionPoints = new java.util.ArrayList();
-      
-      // Find "key":"value" patterns (strings)
-      java.util.regex.Pattern pb = java.util.regex.Pattern.compile("\"([^\"]+)\"\\s*:\\s*\"([^\"]*)\"");
-      java.util.regex.Matcher mb = pb.matcher(bodyJson);
-      while (mb.find()) {
-          bodyInjectionPoints.add(new Object[]{new int[]{mb.start(2), mb.end(2)}, mb.group(1), mb.group(2), "'", "string"});
-      }
-      
-      // Find "key":number patterns - test both "num" and "num'"
-      java.util.regex.Pattern pbNum = java.util.regex.Pattern.compile("\"([^\"]+)\"\\s*:\\s*(-?\\d+\\.?\\d*)");
-      java.util.regex.Matcher mbNum = pbNum.matcher(bodyJson);
-      while (mbNum.find()) {
-          int numStart = mbNum.start(2);
-          int numEnd = mbNum.end(2);
-          String numValue = mbNum.group(2);
-          // First test: convert number to string "num"
-          bodyInjectionPoints.add(new Object[]{new int[]{numStart, numEnd}, mbNum.group(1), numValue, "\"" + numValue + "\"", "number->string"});
-          // Second test: convert number to string with quote "num'"
-          bodyInjectionPoints.add(new Object[]{new int[]{numStart, numEnd}, mbNum.group(1), numValue, "\"" + numValue + "'\"", "number->string'"});
-      }
-      
-      // Find empty arrays "key":[]
-      java.util.regex.Pattern pbArray = java.util.regex.Pattern.compile("\"([^\"]+)\"\\s*:\\s*(\\[\\s*\\])");
-      java.util.regex.Matcher mbArray = pbArray.matcher(bodyJson);
-      while (mbArray.find()) {
-          int insertionPoint = mbArray.end(2) - 1;
-          bodyInjectionPoints.add(new Object[]{new int[]{mbArray.start(2), insertionPoint}, mbArray.group(1) + " (empty array)", "[]", "\"bambda'\"", "array"});
-      }
-      
-      // Find strings in arrays
-      java.util.regex.Pattern pbArrayStr = java.util.regex.Pattern.compile("\\[\\s*\"([^\"]*)\"");
-      java.util.regex.Matcher mbArrayStr = pbArrayStr.matcher(bodyJson);
-      while (mbArrayStr.find()) {
-          int valueStart = mbArrayStr.start(1);
-          int valueEnd = mbArrayStr.end(1);
-          boolean isDuplicate = false;
-          for (int i = 0; i < bodyInjectionPoints.size(); i++) {
-              Object[] existing = (Object[]) bodyInjectionPoints.get(i);
-              int[] existingPos = (int[]) existing[0];
-              if (existingPos[0] == valueStart) { isDuplicate = true; break; }
-          }
-          if (!isDuplicate) {
-              bodyInjectionPoints.add(new Object[]{new int[]{valueStart, valueEnd}, "array_item", mbArrayStr.group(1), "'", "string"});
-          }
-      }
-      
-      // Find numbers in arrays - test both "num" and "num'"
-      java.util.regex.Pattern pbArrayNum = java.util.regex.Pattern.compile("\\[\\s*(-?\\d+\\.?\\d*)");
-      java.util.regex.Matcher mbArrayNum = pbArrayNum.matcher(bodyJson);
-      while (mbArrayNum.find()) {
-          int numStart = mbArrayNum.start(1);
-          int numEnd = mbArrayNum.end(1);
-          String numValue = mbArrayNum.group(1);
-          boolean isDuplicate = false;
-          for (int i = 0; i < bodyInjectionPoints.size(); i++) {
-              Object[] existing = (Object[]) bodyInjectionPoints.get(i);
-              int[] existingPos = (int[]) existing[0];
-              if (existingPos[0] == numStart) { isDuplicate = true; break; }
-          }
-          if (!isDuplicate) {
-              bodyInjectionPoints.add(new Object[]{new int[]{numStart, numEnd}, "array_num", numValue, "\"" + numValue + "\"", "number->string"});
-              bodyInjectionPoints.add(new Object[]{new int[]{numStart, numEnd}, "array_num", numValue, "\"" + numValue + "'\"", "number->string'"});
-          }
-      }
+      var bodyInjectionPoints = new JsonWalker(bodyJson).walk();
       
       logging().logToOutput("[*] Found " + bodyInjectionPoints.size() + " fields to test in body\n");
       
@@ -560,70 +634,7 @@ source: |+
           
           logging().logToOutput("[*] Multipart field '" + mpFieldName + "' JSON: " + (mpJson.length() > 200 ? mpJson.substring(0, 200) + "..." : mpJson));
           
-          var mpInjectionPoints = new java.util.ArrayList();
-          
-          // Find "key":"value" patterns (strings) - handles nested objects
-          java.util.regex.Pattern mpP = java.util.regex.Pattern.compile("\"([^\"]+)\"\\s*:\\s*\"([^\"]*)\"");
-          java.util.regex.Matcher mpM = mpP.matcher(mpJson);
-          while (mpM.find()) {
-              mpInjectionPoints.add(new Object[]{new int[]{mpM.start(2), mpM.end(2)}, mpM.group(1), mpM.group(2), "'", "string"});
-          }
-          
-          // Find "key":number patterns (not followed by object/array)
-          java.util.regex.Pattern mpPNum = java.util.regex.Pattern.compile("\"([^\"]+)\"\\s*:\\s*(-?\\d+\\.?\\d*)(?=[,}\\]\\s])");
-          java.util.regex.Matcher mpMNum = mpPNum.matcher(mpJson);
-          while (mpMNum.find()) {
-              int numStart = mpMNum.start(2);
-              int numEnd = mpMNum.end(2);
-              String numValue = mpMNum.group(2);
-              mpInjectionPoints.add(new Object[]{new int[]{numStart, numEnd}, mpMNum.group(1), numValue, "\"" + numValue + "\"", "number->string"});
-              mpInjectionPoints.add(new Object[]{new int[]{numStart, numEnd}, mpMNum.group(1), numValue, "\"" + numValue + "'\"", "number->string'"});
-          }
-          
-          // Find empty arrays "key":[] anywhere in JSON (including nested objects)
-          java.util.regex.Pattern mpPEmptyArray = java.util.regex.Pattern.compile("\"([^\"]+)\"\\s*:\\s*(\\[\\s*\\])");
-          java.util.regex.Matcher mpMEmptyArray = mpPEmptyArray.matcher(mpJson);
-          while (mpMEmptyArray.find()) {
-              int arrayStart = mpMEmptyArray.start(2);
-              int arrayEnd = mpMEmptyArray.end(2) - 1; // Position before closing ]
-              mpInjectionPoints.add(new Object[]{new int[]{arrayStart, arrayEnd}, mpMEmptyArray.group(1) + " (empty array)", "[]", "\"bambda'\"", "array"});
-          }
-          
-          // Find strings in arrays
-          java.util.regex.Pattern mpPArrayStr = java.util.regex.Pattern.compile("\\[\\s*\"([^\"]*)\"");
-          java.util.regex.Matcher mpMArrayStr = mpPArrayStr.matcher(mpJson);
-          while (mpMArrayStr.find()) {
-              int valueStart = mpMArrayStr.start(1);
-              int valueEnd = mpMArrayStr.end(1);
-              boolean isDuplicate = false;
-              for (int i = 0; i < mpInjectionPoints.size(); i++) {
-                  Object[] existing = (Object[]) mpInjectionPoints.get(i);
-                  int[] existingPos = (int[]) existing[0];
-                  if (existingPos[0] == valueStart) { isDuplicate = true; break; }
-              }
-              if (!isDuplicate) {
-                  mpInjectionPoints.add(new Object[]{new int[]{valueStart, valueEnd}, "array_item", mpMArrayStr.group(1), "'", "string"});
-              }
-          }
-          
-          // Find numbers in arrays
-          java.util.regex.Pattern mpPArrayNum = java.util.regex.Pattern.compile("\\[\\s*(-?\\d+\\.?\\d*)");
-          java.util.regex.Matcher mpMArrayNum = mpPArrayNum.matcher(mpJson);
-          while (mpMArrayNum.find()) {
-              int numStart = mpMArrayNum.start(1);
-              int numEnd = mpMArrayNum.end(1);
-              String numValue = mpMArrayNum.group(1);
-              boolean isDuplicate = false;
-              for (int i = 0; i < mpInjectionPoints.size(); i++) {
-                  Object[] existing = (Object[]) mpInjectionPoints.get(i);
-                  int[] existingPos = (int[]) existing[0];
-                  if (existingPos[0] == numStart) { isDuplicate = true; break; }
-              }
-              if (!isDuplicate) {
-                  mpInjectionPoints.add(new Object[]{new int[]{numStart, numEnd}, "array_num", numValue, "\"" + numValue + "\"", "number->string"});
-                  mpInjectionPoints.add(new Object[]{new int[]{numStart, numEnd}, "array_num", numValue, "\"" + numValue + "'\"", "number->string'"});
-              }
-          }
+          var mpInjectionPoints = new JsonWalker(mpJson).walk();
           
           logging().logToOutput("[*] Found " + mpInjectionPoints.size() + " field(s) to test in multipart '" + mpFieldName + "'\n");
           

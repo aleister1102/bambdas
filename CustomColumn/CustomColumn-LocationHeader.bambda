@@ -1,0 +1,11 @@
+id: 28096ab5-87f3-407e-9d10-b49f17bc7d02
+name: GraphQL Request Details
+author: insomnia1102
+function: CUSTOM_COLUMN
+location: PROXY_HTTP_HISTORY
+source: |+
+    /*
+    * Bambda for Burp Suite to identify Location header values from HTTP responses.
+    */  
+    
+    return requestResponse.response().headerValue("Location");
