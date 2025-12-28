@@ -2,7 +2,7 @@ id: c5d6e7f8-e9f0-4ba2-b3c4-d5e6f7a8b9c0
 name: Form Params to XML
 function: CUSTOM_ACTION
 location: REPEATER
-source: |+
+source: |
   /**
    * Converts URL-encoded form parameters to XML format.
    * Updates Content-Type header to application/xml.
@@ -29,13 +29,13 @@ source: |+
       return;
   }
 
-  String escapeXml(String s) {
+  java.util.function.UnaryOperator<String> escapeXml = (s) -> {
       return s.replace("&", "&amp;")
               .replace("<", "&lt;")
               .replace(">", "&gt;")
               .replace("\"", "&quot;")
               .replace("'", "&apos;");
-  }
+  };
 
   try {
       StringBuilder xml = new StringBuilder();
@@ -71,7 +71,7 @@ source: |+
           }
 
           xml.append("  <").append(tagName).append(">");
-          xml.append(escapeXml(value));
+          xml.append(escapeXml.apply(value));
           xml.append("</").append(tagName).append(">\n");
       }
 
@@ -84,4 +84,3 @@ source: |+
   } catch (Exception e) {
       logging().logToError("[!] Failed to convert: " + e.getMessage());
   }
-

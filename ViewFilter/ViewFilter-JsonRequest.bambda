@@ -1,44 +1,49 @@
-id: 12345678-90ab-cdef-1234-567890abcdef
-name: JSON Request
-function: VIEW_FILTER
-location: PROXY_HTTP_HISTORY
-source: |+
-  /**
-   * Finds state-changing requests (POST, PUT, PATCH, DELETE) with JSON request body or URL-encoded parameters.
-   *
-   * Useful to identify requests that handle structured data and modify state.
-   *
-   * @author assistant
-   **/
+/**
+ * JSON state-changing requests with optional deduplication.
+ * TOGGLE: Change ENABLE_DEDUP to false to show all requests.
+ **/
+final boolean ENABLE_DEDUP = true;  // ← toggle this
 
-  HttpRequest request = requestResponse.request();
-  
-  // Only include state-changing methods
-  String method = request.method();
-  if (!method.equals("POST") && !method.equals("PUT") && !method.equals("PATCH") && !method.equals("DELETE")) {
-      return false;
-  }
+HttpRequest req = requestResponse.request();
+String method = req.method();
 
-  // Check for JSON content type in request body
-  String contentTypeHeader = request.headerValue("Content-Type");
-  if (contentTypeHeader != null && contentTypeHeader.toLowerCase().contains("application/json")) {
-      return true;
-  }
+// State-changing methods only
+if (!(method.equals("POST") || method.equals("PUT") || method.equals("PATCH") || method.equals("DELETE"))) {
+    return false;
+}
 
-  // Check if body looks like JSON
-  String body = request.bodyToString();
-  if (body != null && (body.trim().startsWith("{") || body.trim().startsWith("["))) {
-      return true;
-  }
+// Must contain JSON
+String body = req.bodyToString();
+boolean hasJson =
+    (req.headerValue("Content-Type") != null && req.headerValue("Content-Type").toLowerCase().contains("application/json")) ||
+    (body != null && (body.trim().startsWith("{") || body.trim().startsWith("["))) ||
+    (req.hasParameters() && req.parameters().stream()
+        .filter(p -> p.type() == HttpParameterType.URL)
+        .anyMatch(p -> {
+            String v = p.value();
+            return v != null && (v.trim().startsWith("{") || v.trim().startsWith("["));
+        }));
 
-  // Check for URL-encoded parameters (BODY type parameters)
-  if (request.hasParameters()) {
-      for (ParsedHttpParameter parameter : request.parameters()) {
-          HttpParameterType paramType = parameter.type();
-          if (paramType == HttpParameterType.BODY) {
-              return true;
-          }
-      }
-  }
+if (!hasJson) return false;
 
-  return false;
+// Deduplication logic
+if (ENABLE_DEDUP) {
+    // Session-aware key with timestamp to allow reset on toggle
+    String timestamp = System.getProperty("bambda.session.timestamp");
+    if (timestamp == null) {
+        timestamp = String.valueOf(System.currentTimeMillis());
+        System.setProperty("bambda.session.timestamp", timestamp);
+    }
+    
+    String key = method + " " + req.httpService().host() + req.path();
+    String propKey = "bambda.seen." + timestamp + "." + key.hashCode();
+    
+    if (System.getProperty(propKey) != null) return false;  // duplicate
+    System.setProperty(propKey, "1");
+} else {
+    // Clear the session timestamp when dedup is disabled
+    System.clearProperty("bambda.session.timestamp");
+}
+
+return true;
+

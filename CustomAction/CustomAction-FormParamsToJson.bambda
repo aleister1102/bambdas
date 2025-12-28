@@ -2,7 +2,7 @@ id: c3d4e5f6-c7d8-49e0-f1a2-b3c4d5e6f7a8
 name: Form Params to JSON
 function: CUSTOM_ACTION
 location: REPEATER
-source: |+
+source: |
   /**
    * Converts URL-encoded form parameters to JSON format.
    * Updates Content-Type header to application/json.
@@ -28,6 +28,14 @@ source: |+
       logging().logToOutput("[!] Request body does not appear to be form-urlencoded");
       return;
   }
+
+  java.util.function.UnaryOperator<String> escapeJson = (s) -> {
+      return s.replace("\\", "\\\\")
+              .replace("\"", "\\\"")
+              .replace("\n", "\\n")
+              .replace("\r", "\\r")
+              .replace("\t", "\\t");
+  };
 
   try {
       StringBuilder json = new StringBuilder();
@@ -61,7 +69,7 @@ source: |+
           }
           first = false;
 
-          json.append("\"").append(escapeJson(key)).append("\":");
+          json.append("\"").append(escapeJson.apply(key)).append("\":");
 
           // Try to detect if value is a number or boolean
           if (value.isEmpty()) {
@@ -71,7 +79,7 @@ source: |+
           } else if (value.matches("-?\\d+(\\.\\d+)?")) {
               json.append(value);
           } else {
-              json.append("\"").append(escapeJson(value)).append("\"");
+              json.append("\"").append(escapeJson.apply(value)).append("\"");
           }
       }
 
@@ -84,12 +92,3 @@ source: |+
   } catch (Exception e) {
       logging().logToError("[!] Failed to convert: " + e.getMessage());
   }
-
-  String escapeJson(String s) {
-      return s.replace("\\", "\\\\")
-              .replace("\"", "\\\"")
-              .replace("\n", "\\n")
-              .replace("\r", "\\r")
-              .replace("\t", "\\t");
-  }
-

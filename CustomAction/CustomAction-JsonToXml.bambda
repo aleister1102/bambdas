@@ -2,7 +2,7 @@ id: c1d2e3f4-a5b6-47c8-d9e0-f1a2b3c4d5e6
 name: JSON to XML
 function: CUSTOM_ACTION
 location: REPEATER
-source: |+
+source: |
   /**
    * Converts JSON request body to XML format.
    * Updates Content-Type header to application/xml.
@@ -19,10 +19,19 @@ source: |+
 
   String bodyStr = request.bodyToString().trim();
 
-  if (!bodyStr.startsWith("{") && !bodyStr.startsWith("[")) {
+  if (!bodyStr.startsWith("{{") && !bodyStr.startsWith("[")) {
       logging().logToOutput("[!] Request body is not JSON");
       return;
   }
+
+  // Helper to escape XML special characters
+  java.util.function.UnaryOperator<String> escapeXml = (s) -> {
+      return s.replace("&", "&amp;")
+              .replace("<", "&lt;")
+              .replace(">", "&gt;")
+              .replace("\"", "&quot;")
+              .replace("'", "&apos;");
+  };
 
   // Simple JSON to XML converter
   java.util.function.Function<String, String> jsonToXml = (json) -> {
@@ -95,7 +104,7 @@ source: |+
               if (readingValue && currentValue.length() > 0) {
                   String tag = currentKey.toString().replaceAll("[^a-zA-Z0-9_]", "_");
                   String val = currentValue.toString().trim();
-                  xml.append("<").append(tag).append(">").append(escapeXml(val)).append("</").append(tag).append(">\n");
+                  xml.append("<").append(tag).append(">").append(escapeXml.apply(val)).append("</").append(tag).append(">\n");
                   currentKey.setLength(0);
                   currentValue.setLength(0);
                   readingValue = false;
@@ -121,7 +130,7 @@ source: |+
           if (c == ']') {
               if (readingValue && currentValue.length() > 0) {
                   String val = currentValue.toString().trim();
-                  xml.append("<item>").append(escapeXml(val)).append("</item>\n");
+                  xml.append("<item>").append(escapeXml.apply(val)).append("</item>\n");
                   currentValue.setLength(0);
                   readingValue = false;
               }
@@ -137,9 +146,9 @@ source: |+
                   String val = currentValue.toString().trim();
                   if (currentKey.length() > 0) {
                       String tag = currentKey.toString().replaceAll("[^a-zA-Z0-9_]", "_");
-                      xml.append("<").append(tag).append(">").append(escapeXml(val)).append("</").append(tag).append(">\n");
+                      xml.append("<").append(tag).append(">").append(escapeXml.apply(val)).append("</").append(tag).append(">\n");
                   } else {
-                      xml.append("<item>").append(escapeXml(val)).append("</item>\n");
+                      xml.append("<item>").append(escapeXml.apply(val)).append("</item>\n");
                   }
                   currentKey.setLength(0);
                   currentValue.setLength(0);
@@ -159,15 +168,6 @@ source: |+
       return xml.toString();
   };
 
-  // Helper to escape XML special characters
-  String escapeXml(String s) {
-      return s.replace("&", "&amp;")
-              .replace("<", "&lt;")
-              .replace(">", "&gt;")
-              .replace("\"", "&quot;")
-              .replace("'", "&apos;");
-  }
-
   try {
       String xmlBody = jsonToXml.apply(bodyStr);
       request = request.withBody(xmlBody);
@@ -177,4 +177,3 @@ source: |+
   } catch (Exception e) {
       logging().logToError("[!] Failed to convert: " + e.getMessage());
   }
-

